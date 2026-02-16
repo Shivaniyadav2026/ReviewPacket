@@ -1,0 +1,21 @@
+directories:
+  output: dist
+  buildResources: build
+appId: com.reviewpackets.desktop
+productName: ReviewPackets
+files:
+  - filter:
+      - electron/**/*
+      - frontend/dist/**/*
+extraResources:
+  - from: backend/dist/ReviewPacketsBackend.exe
+    to: backend/ReviewPacketsBackend.exe
+win:
+  target: nsis
+  sign: false
+  signingHashAlgorithms: []
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+electronVersion: 30.5.1

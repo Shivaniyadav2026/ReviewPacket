@@ -1,0 +1,70 @@
+﻿@use '@angular/material' as mat;
+
+// Angular Material v18 uses the M2 theming APIs with the m2- prefix.
+$reviewpackets-primary: mat.m2-define-palette(mat.$m2-indigo-palette, 700);
+$reviewpackets-accent: mat.m2-define-palette(mat.$m2-teal-palette, 500);
+$reviewpackets-warn: mat.m2-define-palette(mat.$m2-red-palette, 600);
+
+$reviewpackets-theme: mat.m2-define-light-theme((
+  color: (
+    primary: $reviewpackets-primary,
+    accent: $reviewpackets-accent,
+    warn: $reviewpackets-warn
+  )
+));
+
+@include mat.core();
+@include mat.all-component-themes($reviewpackets-theme);
+
+:root {
+  --rp-bg: #f6f8fb;
+  --rp-card: #ffffff;
+  --rp-ink: #1c2430;
+  --rp-muted: #5f6b7a;
+  --rp-accent: #0f766e;
+}
+
+body {
+  margin: 0;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  background: radial-gradient(circle at top left, #eef2ff, #f6f8fb 55%);
+  color: var(--rp-ink);
+}
+
+.app-container {
+  padding: 24px;
+}
+
+.section {
+  background: var(--rp-card);
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+  margin-bottom: 20px;
+}
+
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.table-wrapper {
+  overflow: auto;
+  max-height: 420px;
+}
+
+.mat-mdc-table {
+  min-width: 800px;
+}
+
+.status-chip {
+  display: inline-flex;
+  padding: 4px 10px;
+  background: #d1fae5;
+  color: #065f46;
+  border-radius: 999px;
+  font-size: 12px;
+}

@@ -1,0 +1,28 @@
+﻿{
+  "appId": "com.reviewpackets.desktop",
+  "productName": "ReviewPackets",
+  "directories": {
+    "output": "dist"
+  },
+  "files": [
+    "electron/**/*",
+    "frontend/dist/**/*"
+  ],
+  "extraResources": [
+    {
+      "from": "backend/dist/ReviewPacketsBackend.exe",
+      "to": "backend/ReviewPacketsBackend.exe"
+    }
+  ],
+  "win": {
+    "target": "nsis",
+    "sign": false,
+    "signingHashAlgorithms": [],
+    "signAndEditExecutable": false
+  },
+  "nsis": {
+    "oneClick": false,
+    "perMachine": false,
+    "allowToChangeInstallationDirectory": true
+  }
+}

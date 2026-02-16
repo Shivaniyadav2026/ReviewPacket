@@ -1,0 +1,37 @@
+cd backend
+.\.venv\Scripts\Activate.ps1
+python -m PyInstaller --clean --noconfirm reviewpackets.spec
+cd ..
+
+
+
+
+# Find the PID using port 8000
+netstat -ano | findstr :8000
+
+# Kill it (replace <PID>)
+taskkill /PID <PID> /F
+Then rerun:
+
+powershell
+
+python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
+
+
+
+
+
+Step 2: Check if port 4200 is open
+Open a new PowerShell and run:
+
+netstat -ano | findstr :4200
+If it shows a PID, the server is running. If it shows nothing, ng serve isn’t running.
+
+Step 3: Try 127.0.0.1 explicitly
+
+http://127.0.0.1:4200
+Step 4: Run ng serve on all interfaces
+Sometimes localhost binding fails. Try:
+
+cd frontend
+ng serve --host 0.0.0.0 --port 4200

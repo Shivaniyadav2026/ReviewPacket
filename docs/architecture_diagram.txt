@@ -1,0 +1,19 @@
+﻿ReviewPackets Architecture (Clean + Offline)
+
+[ Electron Shell ]
+      |
+      | loads
+      v
+[ Angular UI ]  <----HTTP---->  [ FastAPI Local Server ]
+      |                              |
+      |                              v
+      |                        [ Service Layer ]
+      |                              |
+      |                              v
+      |                        [ Repositories ]
+      |                              |
+      |                              v
+      |                        [ Pandas + Excel Utils ]
+      |
+      v
+[ Local CSV Export ]

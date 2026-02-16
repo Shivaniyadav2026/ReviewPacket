@@ -1,0 +1,16 @@
+{
+  "name": "reviewpackets",
+  "version": "1.0.0",
+  "private": true,
+  "main": "electron/main.js",
+  "scripts": {
+    "build:frontend": "cd frontend && npm install && npm run build",
+    "build:backend": "powershell -ExecutionPolicy Bypass -File scripts/build-backend.ps1",
+    "build:electron": "powershell -ExecutionPolicy Bypass -File scripts/build-electron.ps1",
+    "dist": "npm run build:frontend && npm run build:backend && npm run build:electron"
+  },
+  "devDependencies": {
+    "electron": "^30.0.0",
+    "electron-builder": "^24.13.3"
+  }
+}
