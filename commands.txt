@@ -17,7 +17,16 @@ powershell
 
 python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
 
+To allow the authorized signed
+- Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
 
+Run this once in PowerShell:
+
+Unblock-File .\build-installer.ps1
+
+Then run:
+
+powershell -ExecutionPolicy Bypass -File .\build-installer.ps1
 
 
 
@@ -35,3 +44,27 @@ Sometimes localhost binding fails. Try:
 
 cd frontend
 ng serve --host 0.0.0.0 --port 4200
+
+
+
+✅ How to build the installer (full bundle)
+1. Build backend (bundles Python runtime)
+cd backend
+.\.venv\Scripts\Activate.ps1
+python -m PyInstaller --clean --noconfirm reviewpackets.spec
+cd ..
+
+2. Build Angular UI
+cd frontend
+npm install
+npm run build
+cd ..
+
+3. Build Electron installer
+npm install
+npm run dist
+✅ Output you give to users
+s
+After step 3:
+
+dist\ReviewPackets Setup.exe
