@@ -4,6 +4,19 @@ python -m PyInstaller --clean --noconfirm reviewpackets.spec
 cd ..
 
 
+Use this on the build machine (not test machine):
+
+cd "C:\Users\Anurag Srivastava\Desktop\Learning\Practice\ReviewPacket\backend"
+& "C:\Users\Anurag Srivastava\AppData\Local\Programs\Python\Python311\python.exe" -m venv .venv
+Then activate:
+
+.\.venv\Scripts\Activate.ps1
+If python not found on a test machine, that is expected and should not be needed.
+Test machine should only run the installer EXE, not create .venv.
+
+If your installed app still needs Python on test machine, it means the packaged backend EXE is not being bundled/started correctly, and we should fix packaging/startup rather than installing Python there.
+
+
 
 
 # Find the PID using port 8000
@@ -68,3 +81,9 @@ s
 After step 3:
 
 dist\ReviewPackets Setup.exe
+
+
+
+
+
+
