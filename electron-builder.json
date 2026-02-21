@@ -12,6 +12,10 @@
     {
       "from": "backend/dist/ReviewPacketsBackend.exe",
       "to": "backend/ReviewPacketsBackend.exe"
+    },
+    {
+      "from": "backend/collaborator_config.json",
+      "to": "backend/collaborator_config.json"
     }
   ],
   "win": {

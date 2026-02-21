@@ -11,6 +11,7 @@ import { MatTableModule } from '@angular/material/table';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { finalize } from 'rxjs/operators';
+import { firstValueFrom } from 'rxjs';
 
 import { ApiService } from './services/api.service';
 import {
@@ -192,8 +193,8 @@ export class AppComponent {
   }
 
   async openCollaboratorLogin(): Promise<void> {
-    if (!this.collaboratorConfig) {
-      this.showError('Collaborator config not loaded yet.');
+    const ready = await this.ensureCollaboratorConfig();
+    if (!ready || !this.collaboratorConfig) {
       return;
     }
 
@@ -209,8 +210,8 @@ export class AppComponent {
   }
 
   async fetchAndValidateCollaborator(): Promise<void> {
-    if (!this.collaboratorConfig) {
-      this.showError('Collaborator config not loaded yet.');
+    const ready = await this.ensureCollaboratorConfig();
+    if (!ready || !this.collaboratorConfig) {
       return;
     }
 
@@ -240,9 +241,9 @@ export class AppComponent {
         this.fetchProgress = Math.round(((i + 1) * 100) / total);
       }
 
-      const parseResponse = await this.api
-        .parseValidateCollaboratorReviews(this.collaboratorSelectedFields, htmlPayload)
-        .toPromise();
+      const parseResponse = await firstValueFrom(
+        this.api.parseValidateCollaboratorReviews(this.collaboratorSelectedFields, htmlPayload)
+      );
 
       this.availableCollaboratorFields = parseResponse?.available_fields || [];
       if (this.collaboratorSelectedFields.length === 0) {
@@ -285,7 +286,7 @@ export class AppComponent {
       return;
     }
 
-    const plan = await this.api.getPdfPlan(eligibleIds).toPromise();
+    const plan = await firstValueFrom(this.api.getPdfPlan(eligibleIds));
     const jobs: PdfPlanItem[] = plan?.jobs || [];
     const result = await api.downloadPdfs(jobs);
     this.showInfo(`PDF complete: ${result.downloaded.length} success, ${result.failed.length} failed.`);
@@ -296,6 +297,21 @@ export class AppComponent {
     const base = (config?.base_url || '').replace(/\/$/, '');
     const path = (config?.review_path_template || '/user/{reviewId}').replace('{reviewId}', reviewId);
     return `${base}${path}`;
+  }
+
+  private async ensureCollaboratorConfig(): Promise<boolean> {
+    if (this.collaboratorConfig) {
+      return true;
+    }
+
+    try {
+      this.collaboratorConfig = await firstValueFrom(this.api.getCollaboratorConfig());
+      return true;
+    } catch (error: any) {
+      const detail = error?.error?.detail || error?.message || 'Failed to load Collaborator config.';
+      this.showError(detail);
+      return false;
+    }
   }
 
   private downloadBlob(blob: Blob, filename: string): void {

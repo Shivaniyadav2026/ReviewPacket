@@ -1,7 +1,7 @@
 ﻿const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('reviewpackets', {
-  version: '1.0.0',
+  version: '1.0.1',
   collaborator: {
     openLogin: (loginUrl) => ipcRenderer.invoke('collaborator:open-login', loginUrl),
     fetchHtml: (pageUrl) => ipcRenderer.invoke('collaborator:fetch-html', pageUrl),

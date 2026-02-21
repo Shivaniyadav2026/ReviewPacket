@@ -7,6 +7,7 @@ from PyInstaller.utils.hooks import collect_data_files
 data_files = (
     collect_data_files('pandas')
     + collect_data_files('openpyxl')
+    + [('collaborator_config.json', '.')]
 )
 
 hidden_imports = [
