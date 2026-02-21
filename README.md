@@ -52,3 +52,17 @@ scripts/
 
 ## Packaging
 Build machine needs Python 3.11 or 3.12. See `docs/packaging.md`.
+
+## Collaborator Validation (SSO + MFA Safe)
+- Open Collaborator login from app and complete SSO + MFA manually.
+- Review IDs are extracted from dump column `Review Info`.
+- App fetches review pages through Electron authenticated session cookies.
+- Backend parses HTML, validates selected fields, and produces status/comments.
+- CSV export includes field values and missing fields.
+- PDF download is available for `Complete` reviews only.
+
+See:
+- `docs/collaborator_architecture.md`
+- `docs/collaborator_api_contracts.md`
+- `docs/collaborator_sequence_diagram.txt`
+- `docs/collaborator_error_handling.md`

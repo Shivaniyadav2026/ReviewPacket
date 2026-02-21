@@ -44,6 +44,7 @@
     <div class="section-title">4. Preview Table</div>
     <div *ngIf="isLoading" style="padding: 12px;">
       <mat-progress-spinner diameter="32" mode="indeterminate"></mat-progress-spinner>
+      <div *ngIf="fetchProgress > 0" style="margin-top:8px;">Collaborator fetch progress: {{ fetchProgress }}%</div>
     </div>
     <div class="table-wrapper" *ngIf="previewRows.length">
       <table mat-table [dataSource]="previewRows">
@@ -60,5 +61,59 @@
     <button mat-stroked-button color="accent" (click)="exportCsv()" [disabled]="!previewRows.length">
       Export CSV
     </button>
+  </div>
+
+  <div class="section">
+    <div class="section-title">5. Collaborator Validation</div>
+    <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom: 12px;">
+      <button mat-flat-button color="primary" (click)="openCollaboratorLogin()">Open Collaborator Login</button>
+      <button mat-stroked-button color="primary" (click)="loadReviewIdsFromDump()">Load Review IDs from Dump</button>
+      <button mat-stroked-button color="primary" (click)="applyReviewIdsFromText()">Apply Edited IDs</button>
+    </div>
+
+    <mat-form-field appearance="outline" style="width:100%;">
+      <mat-label>Review IDs (editable)</mat-label>
+      <textarea matInput rows="4" [(ngModel)]="reviewIdsText"></textarea>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" style="width:100%;">
+      <mat-label>Fields to validate</mat-label>
+      <mat-select multiple [(value)]="collaboratorSelectedFields">
+        <mat-option *ngFor="let field of availableCollaboratorFields" [value]="field">{{ field }}</mat-option>
+      </mat-select>
+    </mat-form-field>
+
+    <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px;">
+      <button mat-flat-button color="primary" (click)="fetchAndValidateCollaborator()">Fetch + Validate Reviews</button>
+      <button mat-stroked-button color="accent" (click)="exportCollaboratorCsv()" [disabled]="!collaboratorResults.length">Export Collaborator CSV</button>
+      <button mat-stroked-button color="accent" (click)="downloadCollaboratorPdfs()" [disabled]="!collaboratorResults.length">Download Complete PDFs</button>
+    </div>
+
+    <div class="table-wrapper" *ngIf="collaboratorResults.length">
+      <table mat-table [dataSource]="collaboratorResults">
+        <ng-container matColumnDef="review_id">
+          <th mat-header-cell *matHeaderCellDef>Review ID</th>
+          <td mat-cell *matCellDef="let row">{{ row.review_id }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="status">
+          <th mat-header-cell *matHeaderCellDef>Status</th>
+          <td mat-cell *matCellDef="let row">{{ row.status }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="missing_fields">
+          <th mat-header-cell *matHeaderCellDef>Missing Fields</th>
+          <td mat-cell *matCellDef="let row">{{ row.missing_fields.join(', ') }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="comment">
+          <th mat-header-cell *matHeaderCellDef>Comment</th>
+          <td mat-cell *matCellDef="let row">{{ row.comment }}</td>
+        </ng-container>
+
+        <tr mat-header-row *matHeaderRowDef="collaboratorColumns"></tr>
+        <tr mat-row *matRowDef="let row; columns: collaboratorColumns"></tr>
+      </table>
+    </div>
   </div>
 </div>

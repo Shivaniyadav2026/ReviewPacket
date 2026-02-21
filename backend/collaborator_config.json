@@ -1,0 +1,7 @@
+﻿{
+  "baseUrl": "https://collaborator.server.com",
+  "reviewPathTemplate": "/user/{reviewId}",
+  "requestTimeoutSeconds": 30,
+  "maxRetries": 2,
+  "batchSize": 10
+}

@@ -1,0 +1,28 @@
+﻿Collaborator Validation Sequence
+
+User -> Angular UI: Open Collaborator Login
+Angular UI -> Electron Main: collaborator:open-login(baseUrl)
+Electron Main -> Collaborator Server: load login page
+User -> Collaborator Server: complete SSO + MFA
+Collaborator Server -> Electron Session: set auth cookies
+
+User -> Angular UI: Fetch + Validate Reviews
+Angular UI -> FastAPI: GET /collaborator/config
+Angular UI -> FastAPI: GET /collaborator/review-ids
+loop each reviewId
+  Angular UI -> Electron Main: collaborator:fetch-html(reviewUrl)
+  Electron Main -> Collaborator Server: load review page with session cookies
+  Electron Main -> Angular UI: return html
+end
+Angular UI -> FastAPI: POST /collaborator/parse-validate
+FastAPI -> ParserService: parse html
+FastAPI -> ValidationService: validate selected fields
+FastAPI -> Angular UI: validation results
+
+User -> Angular UI: Download Complete PDFs
+Angular UI -> FastAPI: POST /collaborator/pdf-plan
+FastAPI -> Angular UI: pdf jobs
+Angular UI -> Electron Main: collaborator:download-pdfs(jobs)
+Electron Main -> Collaborator Server: render page with session
+Electron Main -> File System: write PDFs
+Electron Main -> Angular UI: success/failure report

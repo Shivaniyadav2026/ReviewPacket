@@ -6,7 +6,13 @@ import {
   DumpUploadResponse,
   KeysUploadResponse,
   PreviewRequest,
-  PreviewResponse
+  PreviewResponse,
+  CollaboratorConfigResponse,
+  ReviewIdsResponse,
+  ReviewHtmlItem,
+  ParseValidateResponse,
+  ValidationResultItem,
+  PdfPlanResponse
 } from '../models/api.models';
 
 @Injectable({
@@ -47,5 +53,33 @@ export class ApiService {
 
   exportCsv(request: PreviewRequest): Observable<Blob> {
     return this.http.post(`${this.baseUrl}/export`, request, { responseType: 'blob' });
+  }
+
+  getCollaboratorConfig(): Observable<CollaboratorConfigResponse> {
+    return this.http.get<CollaboratorConfigResponse>(`${this.baseUrl}/collaborator/config`);
+  }
+
+  getCollaboratorReviewIds(): Observable<ReviewIdsResponse> {
+    return this.http.get<ReviewIdsResponse>(`${this.baseUrl}/collaborator/review-ids`);
+  }
+
+  parseValidateCollaboratorReviews(selectedFields: string[], reviews: ReviewHtmlItem[]): Observable<ParseValidateResponse> {
+    return this.http.post<ParseValidateResponse>(`${this.baseUrl}/collaborator/parse-validate`, {
+      selected_fields: selectedFields,
+      reviews
+    });
+  }
+
+  exportCollaboratorCsv(selectedFields: string[], results: ValidationResultItem[]): Observable<Blob> {
+    return this.http.post(`${this.baseUrl}/collaborator/export-csv`, {
+      selected_fields: selectedFields,
+      results
+    }, { responseType: 'blob' });
+  }
+
+  getPdfPlan(eligibleReviewIds: string[]): Observable<PdfPlanResponse> {
+    return this.http.post<PdfPlanResponse>(`${this.baseUrl}/collaborator/pdf-plan`, {
+      eligible_review_ids: eligibleReviewIds
+    });
   }
 }

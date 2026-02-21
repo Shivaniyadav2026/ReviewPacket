@@ -1,6 +1,6 @@
 ﻿import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { FormBuilder, ReactiveFormsModule, FormGroup } from '@angular/forms';
+import { FormBuilder, ReactiveFormsModule, FormGroup, FormsModule } from '@angular/forms';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -13,12 +13,19 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { finalize } from 'rxjs/operators';
 
 import { ApiService } from './services/api.service';
+import {
+  CollaboratorConfigResponse,
+  ValidationResultItem,
+  ReviewHtmlItem,
+  PdfPlanItem
+} from './models/api.models';
 
 @Component({
   selector: 'app-root',
   standalone: true,
   imports: [
     CommonModule,
+    FormsModule,
     ReactiveFormsModule,
     MatToolbarModule,
     MatCardModule,
@@ -42,6 +49,15 @@ export class AppComponent {
   displayedColumns: string[] = [];
   isLoading = false;
 
+  collaboratorConfig: CollaboratorConfigResponse | null = null;
+  reviewIds: string[] = [];
+  reviewIdsText = '';
+  availableCollaboratorFields: string[] = [];
+  collaboratorSelectedFields: string[] = [];
+  collaboratorResults: ValidationResultItem[] = [];
+  collaboratorColumns: string[] = ['review_id', 'status', 'missing_fields', 'comment'];
+  fetchProgress = 0;
+
   form!: FormGroup;
 
   constructor(
@@ -53,6 +69,7 @@ export class AppComponent {
       keysText: ['']
     });
     this.loadDefaults();
+    this.loadCollaboratorConfig();
   }
 
   loadDefaults(): void {
@@ -62,6 +79,15 @@ export class AppComponent {
         this.selectedFilters = [...filters];
       },
       error: () => this.showError('Failed to load default filters.')
+    });
+  }
+
+  loadCollaboratorConfig(): void {
+    this.api.getCollaboratorConfig().subscribe({
+      next: (config) => {
+        this.collaboratorConfig = config;
+      },
+      error: () => this.showError('Failed to load Collaborator config.')
     });
   }
 
@@ -142,15 +168,147 @@ export class AppComponent {
 
     this.api.exportCsv({ filters: this.selectedFilters }).subscribe({
       next: (blob) => {
-        const url = window.URL.createObjectURL(blob);
-        const anchor = document.createElement('a');
-        anchor.href = url;
-        anchor.download = 'review_packets.csv';
-        anchor.click();
-        window.URL.revokeObjectURL(url);
+        this.downloadBlob(blob, 'review_packets.csv');
       },
       error: (err) => this.showError(err?.error?.detail || 'Failed to export CSV.')
     });
+  }
+
+  loadReviewIdsFromDump(): void {
+    this.api.getCollaboratorReviewIds().subscribe({
+      next: (response) => {
+        this.reviewIds = response.review_ids;
+        this.reviewIdsText = this.reviewIds.join(', ');
+        this.showInfo(`Loaded ${this.reviewIds.length} review IDs from Review Info.`);
+      },
+      error: (err) => this.showError(err?.error?.detail || 'Failed to extract review IDs.')
+    });
+  }
+
+  applyReviewIdsFromText(): void {
+    const raw = this.reviewIdsText.split(/[,;\n\t ]+/g).map((item) => item.trim()).filter((item) => item);
+    this.reviewIds = Array.from(new Set(raw));
+    this.showInfo(`Prepared ${this.reviewIds.length} review IDs.`);
+  }
+
+  async openCollaboratorLogin(): Promise<void> {
+    if (!this.collaboratorConfig) {
+      this.showError('Collaborator config not loaded yet.');
+      return;
+    }
+
+    const api = this.getElectronCollaboratorApi();
+    if (!api) {
+      this.showError('Collaborator login is available only in Electron app.');
+      return;
+    }
+
+    const loginUrl = this.collaboratorConfig.base_url;
+    await api.openLogin(loginUrl);
+    this.showInfo('Collaborator login window opened. Complete SSO + MFA there.');
+  }
+
+  async fetchAndValidateCollaborator(): Promise<void> {
+    if (!this.collaboratorConfig) {
+      this.showError('Collaborator config not loaded yet.');
+      return;
+    }
+
+    if (this.reviewIds.length === 0) {
+      this.showError('No review IDs available. Load from dump or paste manually.');
+      return;
+    }
+
+    const api = this.getElectronCollaboratorApi();
+    if (!api) {
+      this.showError('Collaborator fetch is available only in Electron app.');
+      return;
+    }
+
+    this.isLoading = true;
+    this.fetchProgress = 0;
+
+    try {
+      const htmlPayload: ReviewHtmlItem[] = [];
+      const total = this.reviewIds.length;
+
+      for (let i = 0; i < total; i++) {
+        const reviewId = this.reviewIds[i];
+        const url = this.buildReviewUrl(reviewId);
+        const response = await api.fetchHtml(url);
+        htmlPayload.push({ review_id: reviewId, html: response.html });
+        this.fetchProgress = Math.round(((i + 1) * 100) / total);
+      }
+
+      const parseResponse = await this.api
+        .parseValidateCollaboratorReviews(this.collaboratorSelectedFields, htmlPayload)
+        .toPromise();
+
+      this.availableCollaboratorFields = parseResponse?.available_fields || [];
+      if (this.collaboratorSelectedFields.length === 0) {
+        this.collaboratorSelectedFields = [...this.availableCollaboratorFields];
+      }
+      this.collaboratorResults = parseResponse?.results || [];
+      this.showInfo(`Validated ${this.collaboratorResults.length} reviews.`);
+    } catch (error: any) {
+      this.showError(error?.message || 'Collaborator fetch/validation failed.');
+    } finally {
+      this.isLoading = false;
+    }
+  }
+
+  exportCollaboratorCsv(): void {
+    if (this.collaboratorResults.length === 0) {
+      this.showError('No Collaborator results to export.');
+      return;
+    }
+
+    this.api.exportCollaboratorCsv(this.collaboratorSelectedFields, this.collaboratorResults).subscribe({
+      next: (blob) => this.downloadBlob(blob, 'collaborator_validation.csv'),
+      error: (err) => this.showError(err?.error?.detail || 'Failed to export Collaborator CSV.')
+    });
+  }
+
+  async downloadCollaboratorPdfs(): Promise<void> {
+    const api = this.getElectronCollaboratorApi();
+    if (!api) {
+      this.showError('PDF download is available only in Electron app.');
+      return;
+    }
+
+    const eligibleIds = this.collaboratorResults
+      .filter((row) => row.status === 'Complete')
+      .map((row) => row.review_id);
+
+    if (eligibleIds.length === 0) {
+      this.showError('No complete reviews available for PDF download.');
+      return;
+    }
+
+    const plan = await this.api.getPdfPlan(eligibleIds).toPromise();
+    const jobs: PdfPlanItem[] = plan?.jobs || [];
+    const result = await api.downloadPdfs(jobs);
+    this.showInfo(`PDF complete: ${result.downloaded.length} success, ${result.failed.length} failed.`);
+  }
+
+  private buildReviewUrl(reviewId: string): string {
+    const config = this.collaboratorConfig;
+    const base = (config?.base_url || '').replace(/\/$/, '');
+    const path = (config?.review_path_template || '/user/{reviewId}').replace('{reviewId}', reviewId);
+    return `${base}${path}`;
+  }
+
+  private downloadBlob(blob: Blob, filename: string): void {
+    const url = window.URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = filename;
+    anchor.click();
+    window.URL.revokeObjectURL(url);
+  }
+
+  private getElectronCollaboratorApi(): any {
+    return (window as any).reviewpackets?.collaborator;
   }
 
   private showError(message: string): void {

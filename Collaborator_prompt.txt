@@ -1,0 +1,274 @@
+You are a senior enterprise architect.
+
+Extend the existing desktop application ReviewPackets (Python backend + Angular UI + Electron wrapper) to integrate SmartBear Collaborator review validation using Electron-managed authenticated session.
+
+This must be production-ready and enterprise-safe.
+
+🔐 AUTHENTICATION (Electron Session-Based)
+
+Collaborator uses SSO + MFA.
+
+We must NOT automate username/password login.
+
+Use Electron’s persistent browser session:
+
+Create a dedicated Electron BrowserWindow for Collaborator login.
+
+If user not logged in, open login page.
+
+User logs in manually via SSO + authenticator.
+
+Store session cookies in Electron session.
+
+Reuse this session for all review page fetches.
+
+Once authenticated:
+
+Fetch review pages using Electron webContents.
+
+Extract HTML after page loads.
+
+Send HTML to backend for parsing.
+
+No direct raw HTTP requests without cookies.
+
+
+🎯 FEATURE GOAL
+
+We already load an Excel dump that contains a column called Review Info.
+Inside that column there are review IDs.
+
+Each review ID corresponds to a Collaborator page:
+
+https://collaborator.server.com/user/{reviewId}
+
+We must fetch that page, extract fields, validate them, preview results, and optionally download PDFs.
+
+The system runs locally but connects to Collaborator server via HTTP.
+
+
+📥 INPUT FLOW
+
+Excel dump already loaded (existing feature)
+
+Extract review IDs from column "Review Info"
+
+Allow user to review/edit extracted IDs
+
+UI should show:
+
+list of review IDs
+
+dropdown for selecting fields to validate
+
+📄 FETCH REVIEW PAGE
+
+For each review ID:
+Call:
+https://collaborator.server.com/user/{reviewId}
+
+Parse returned HTML.
+
+Extract fields like:
+
+Review Title
+
+Role
+
+Project
+
+Overview
+
+Participants
+
+Defects
+
+Files
+
+Custom fields
+
+The exact fields may vary, so build a flexible parser.
+
+📋 FIELD SELECTION UI
+
+Show dropdown in UI:
+"Fields to validate"
+
+Populate dynamically from parsed page structure.
+
+Example:
+[ ] Review Title
+[ ] Role
+[ ] Project
+[ ] Overview
+[ ] Reviewers
+[ ] Description
+
+User selects required fields.
+
+🔎 VALIDATION LOGIC
+
+For each review ID:
+
+Check selected fields.
+
+If ALL selected fields have data:
+Status = "Complete"
+
+If any selected field empty:
+Status = "Incomplete"
+List missing fields.
+
+📊 PREVIEW TABLE
+
+Show table:
+
+Review ID
+Selected Fields Values
+Missing Fields
+Comment
+
+Comment rules:
+If no missing fields:
+"All required fields present"
+
+If missing:
+"Missing: Overview, Role"
+
+📤 EXPORT OPTIONS
+
+Button 1:
+Export CSV of results.
+
+Include:
+Review ID
+Field values
+Missing fields
+Comment
+
+Button 2:
+Download PDFs
+
+If user chooses:
+Download review pages as PDF.
+
+Rules:
+Only download reviews where all selected fields have data.
+
+Save to folder:
+ReviewPackets/Downloads/{timestamp}/
+
+📄 PDF GENERATION
+
+Generate PDF of each review page.
+
+Options:
+
+Use headless Chromium
+
+OR Playwright
+
+OR Puppeteer via Python
+
+PDF must contain full review page.
+
+🏗 ARCHITECTURE REQUIREMENTS
+
+Backend (Python):
+
+FastAPI service
+
+CollaboratorService
+
+HTMLParser module (BeautifulSoup)
+
+PDFService
+
+ValidationService
+
+Structure:
+backend/
+api/
+services/
+collaborator_service.py
+parser_service.py
+validation_service.py
+pdf_service.py
+models/
+utils/
+
+Frontend (Angular):
+
+Review validation screen
+
+Field selector dropdown
+
+Preview table
+
+Export buttons
+
+Electron:
+
+Reuse existing wrapper
+
+Call backend endpoints
+
+⚡ PERFORMANCE
+
+Handle 100+ review IDs.
+
+Use:
+
+async requests
+
+batching
+
+progress bar
+
+🧪 TESTING
+
+Add:
+
+unit tests for parser
+
+mock HTML page tests
+
+validation tests
+
+🎁 ALSO GENERATE
+
+Architecture explanation
+
+API contracts
+
+Folder structure
+
+Sample mocked HTML page
+
+Sequence diagram (text)
+
+Error handling plan
+
+Retry logic
+
+Config file for Collaborator URL
+
+OUTPUT ORDER
+
+Architecture explanation
+
+Data flow
+
+Folder structure
+
+Backend services
+
+Frontend changes
+
+PDF download logic
+
+Tests
+
+Packaging notes
+
+This must be a production-ready feature integrated into the existing ReviewPackets app.
