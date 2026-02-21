@@ -1,7 +1,7 @@
 ﻿{
-  "baseUrl": "https://collaborator.server.com",
-  "reviewPathTemplate": "/user/{reviewId}",
-  "requestTimeoutSeconds": 30,
+  "baseUrl": "https://collaborator.honeywell.com",
+  "reviewPathTemplate": "/ui#review:id={reviewId}",
+  "requestTimeoutSeconds": 150,
   "maxRetries": 2,
   "batchSize": 10
 }
