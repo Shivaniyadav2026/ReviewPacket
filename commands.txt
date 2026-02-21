@@ -6,8 +6,8 @@ cd ..
 
 Use this on the build machine (not test machine):
 
-cd "C:\Users\Anurag Srivastava\Desktop\Learning\Practice\ReviewPacket\backend"
-& "C:\Users\Anurag Srivastava\AppData\Local\Programs\Python\Python311\python.exe" -m venv .venv
+cd "C:\Users\username\Desktop\Learning\Practice\ReviewPacket\backend"
+& "C:\Users\username\AppData\Local\Programs\Python\Python311\python.exe" -m venv .venv
 Then activate:
 
 .\.venv\Scripts\Activate.ps1
