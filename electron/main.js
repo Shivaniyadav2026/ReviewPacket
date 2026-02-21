@@ -5,7 +5,34 @@ const { spawn } = require('child_process');
 
 let backendProcess = null;
 let loginWindow = null;
+let collaboratorLogFile = null;
+
 const COLLAB_SESSION_PARTITION = 'persist:collaborator';
+
+function initCollaboratorLogs() {
+  const logsDir = path.join(app.getPath('userData'), 'logs');
+  fs.mkdirSync(logsDir, { recursive: true });
+  collaboratorLogFile = path.join(logsDir, 'collaborator-electron.log');
+  writeCollaboratorLog('startup', 'Collaborator logging initialized.');
+}
+
+function writeCollaboratorLog(scope, message, metadata) {
+  try {
+    const timestamp = new Date().toISOString();
+    let line = `${timestamp} | ${scope} | ${message}`;
+    if (metadata !== undefined) {
+      line += ` | ${JSON.stringify(metadata)}`;
+    }
+    line += '\n';
+
+    if (collaboratorLogFile) {
+      fs.appendFileSync(collaboratorLogFile, line, 'utf8');
+    }
+    console.log(`[collaborator] ${line.trim()}`);
+  } catch (err) {
+    console.error(`[collaborator] log write failed: ${err.message}`);
+  }
+}
 
 function resolveBackendCommand() {
   const packagedExe = path.join(process.resourcesPath, 'backend', 'ReviewPacketsBackend.exe');
@@ -28,6 +55,7 @@ function resolveBackendCommand() {
 
 function startBackend() {
   const { command, args, cwd } = resolveBackendCommand();
+  writeCollaboratorLog('backend', 'Starting backend process.', { command, args, cwd });
 
   backendProcess = spawn(command, args, {
     cwd,
@@ -35,15 +63,19 @@ function startBackend() {
   });
 
   backendProcess.stdout.on('data', (data) => {
-    console.log(`[backend] ${data}`);
+    writeCollaboratorLog('backend:stdout', String(data).trim());
   });
 
   backendProcess.stderr.on('data', (data) => {
-    console.error(`[backend] ${data}`);
+    writeCollaboratorLog('backend:stderr', String(data).trim());
   });
 
   backendProcess.on('error', (err) => {
-    console.error(`[backend] spawn failed for "${command}": ${err.message}`);
+    writeCollaboratorLog('backend:error', 'Backend spawn failed.', { error: err.message });
+  });
+
+  backendProcess.on('exit', (code, signal) => {
+    writeCollaboratorLog('backend:exit', 'Backend process exited.', { code, signal });
   });
 }
 
@@ -61,7 +93,7 @@ function createWindow() {
   });
 
   win.webContents.on('did-fail-load', (_event, code, description, url) => {
-    console.error(`[renderer] failed to load ${url}: ${code} ${description}`);
+    writeCollaboratorLog('renderer:error', 'Renderer failed to load.', { code, description, url });
   });
 
   win.once('ready-to-show', () => win.show());
@@ -94,19 +126,23 @@ function createCollaboratorWindow(options = {}) {
 ipcMain.handle('collaborator:open-login', async (_event, loginUrl) => {
   const url = String(loginUrl || '').trim();
   if (!url) {
+    writeCollaboratorLog('login:error', 'Missing login URL.');
     throw new Error('Collaborator login URL is required.');
   }
 
   if (loginWindow && !loginWindow.isDestroyed()) {
     loginWindow.focus();
+    writeCollaboratorLog('login', 'Reused existing login window.');
     return { ok: true };
   }
 
   loginWindow = createCollaboratorWindow({ show: true });
   loginWindow.on('closed', () => {
+    writeCollaboratorLog('login', 'Login window closed.');
     loginWindow = null;
   });
 
+  writeCollaboratorLog('login', 'Opening Collaborator login page.', { url });
   await loginWindow.loadURL(url);
   return { ok: true };
 });
@@ -114,14 +150,24 @@ ipcMain.handle('collaborator:open-login', async (_event, loginUrl) => {
 ipcMain.handle('collaborator:fetch-html', async (_event, pageUrl) => {
   const url = String(pageUrl || '').trim();
   if (!url) {
+    writeCollaboratorLog('fetch:error', 'Missing review URL.');
     throw new Error('Collaborator review URL is required.');
   }
 
   const win = createCollaboratorWindow();
+  writeCollaboratorLog('fetch', 'Fetching review HTML.', { url });
+
   try {
     await win.loadURL(url);
     const html = await win.webContents.executeJavaScript('document.documentElement.outerHTML');
+    writeCollaboratorLog('fetch', 'Fetched review HTML successfully.', { url, htmlLength: html.length });
     return { html };
+  } catch (error) {
+    writeCollaboratorLog('fetch:error', 'Failed to fetch review HTML.', {
+      url,
+      error: error.message || 'Unknown error'
+    });
+    throw error;
   } finally {
     if (!win.isDestroyed()) {
       win.destroy();
@@ -134,6 +180,8 @@ ipcMain.handle('collaborator:download-pdfs', async (_event, jobs) => {
   const downloaded = [];
   const failed = [];
 
+  writeCollaboratorLog('pdf', 'Starting PDF batch.', { totalJobs: work.length });
+
   for (const job of work) {
     const reviewId = String(job.reviewId || '').trim();
     const url = String(job.url || '').trim();
@@ -141,6 +189,7 @@ ipcMain.handle('collaborator:download-pdfs', async (_event, jobs) => {
 
     if (!reviewId || !url || !outputFile) {
       failed.push({ reviewId, error: 'Invalid PDF job payload.' });
+      writeCollaboratorLog('pdf:error', 'Invalid PDF job payload.', { reviewId, url, outputFile });
       continue;
     }
 
@@ -151,11 +200,18 @@ ipcMain.handle('collaborator:download-pdfs', async (_event, jobs) => {
         printBackground: true,
         preferCSSPageSize: true
       });
+
       fs.mkdirSync(path.dirname(outputFile), { recursive: true });
       fs.writeFileSync(outputFile, pdf);
       downloaded.push({ reviewId, outputFile });
+      writeCollaboratorLog('pdf', 'PDF generated.', { reviewId, outputFile, size: pdf.length });
     } catch (error) {
       failed.push({ reviewId, error: error.message || 'PDF generation failed.' });
+      writeCollaboratorLog('pdf:error', 'PDF generation failed.', {
+        reviewId,
+        outputFile,
+        error: error.message || 'Unknown error'
+      });
     } finally {
       if (!win.isDestroyed()) {
         win.destroy();
@@ -163,16 +219,28 @@ ipcMain.handle('collaborator:download-pdfs', async (_event, jobs) => {
     }
   }
 
+  writeCollaboratorLog('pdf', 'PDF batch completed.', {
+    downloaded: downloaded.length,
+    failed: failed.length
+  });
+
   return { downloaded, failed };
 });
 
 ipcMain.handle('collaborator:has-session', async (_event, baseUrl) => {
   const url = String(baseUrl || '').trim();
   const cookies = await getCollaboratorSession().cookies.get(url ? { url } : {});
-  return { authenticated: cookies.length > 0 };
+  const authenticated = cookies.length > 0;
+  writeCollaboratorLog('session', 'Session check completed.', {
+    url,
+    authenticated,
+    cookieCount: cookies.length
+  });
+  return { authenticated };
 });
 
 app.whenReady().then(() => {
+  initCollaboratorLogs();
   startBackend();
   createWindow();
 
@@ -184,6 +252,8 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
+  writeCollaboratorLog('shutdown', 'All windows closed.');
+
   if (backendProcess) {
     backendProcess.kill();
   }

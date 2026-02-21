@@ -1,6 +1,7 @@
 ﻿from __future__ import annotations
 
 import io
+import logging
 from pathlib import Path
 
 from fastapi import APIRouter, UploadFile, File, HTTPException
@@ -33,6 +34,7 @@ from backend.services.pdf_service import PDFService
 from backend.services.config_service import ConfigService
 
 router = APIRouter()
+logger = logging.getLogger("collaborator")
 
 dump_service = DumpService()
 keys_service = KeysService()
@@ -108,6 +110,7 @@ def export_csv(payload: PreviewRequest) -> StreamingResponse:
 @router.get("/collaborator/config", response_model=CollaboratorConfigResponse)
 def get_collaborator_config() -> CollaboratorConfigResponse:
     config = config_service.get_collaborator_config()
+    logger.info("Loaded Collaborator config.")
     return CollaboratorConfigResponse(
         base_url=config.base_url,
         review_path_template=config.review_path_template,
@@ -121,15 +124,23 @@ def get_collaborator_config() -> CollaboratorConfigResponse:
 def get_collaborator_review_ids() -> ReviewIdsResponse:
     try:
         review_ids = collaborator_service.extract_review_ids()
+        logger.info("Extracted review IDs from dump.", extra={"count": len(review_ids)})
         return ReviewIdsResponse(review_ids=review_ids)
     except ValueError as exc:
+        logger.error("Failed to extract review IDs: %s", str(exc))
         raise HTTPException(status_code=400, detail=str(exc))
 
 
 @router.post("/collaborator/parse-validate", response_model=ParseValidateResponse)
 def parse_and_validate_reviews(payload: ParseValidateRequest) -> ParseValidateResponse:
     if not payload.selected_fields:
+        logger.error("Parse/validate rejected: no selected fields.")
         raise HTTPException(status_code=400, detail="At least one field must be selected.")
+
+    logger.info(
+        "Starting parse/validate batch.",
+        extra={"reviews": len(payload.reviews), "selected_fields": payload.selected_fields},
+    )
 
     results: list[ValidationResultItem] = []
     available_fields_set: set[str] = set()
@@ -152,6 +163,12 @@ def parse_and_validate_reviews(payload: ParseValidateRequest) -> ParseValidateRe
             )
         )
 
+    complete_count = sum(1 for row in results if row.status == "Complete")
+    logger.info(
+        "Completed parse/validate batch.",
+        extra={"total": len(results), "complete": complete_count, "incomplete": len(results) - complete_count},
+    )
+
     return ParseValidateResponse(
         available_fields=sorted(available_fields_set),
         results=results,
@@ -160,6 +177,11 @@ def parse_and_validate_reviews(payload: ParseValidateRequest) -> ParseValidateRe
 
 @router.post("/collaborator/export-csv")
 def export_collaborator_csv(payload: ExportValidationCsvRequest) -> StreamingResponse:
+    logger.info(
+        "Exporting collaborator CSV.",
+        extra={"rows": len(payload.results), "selected_fields": payload.selected_fields},
+    )
+
     buffer = io.StringIO()
     headers = ["Review ID", *payload.selected_fields, "Missing Fields", "Comment", "Status"]
     buffer.write(",".join(_csv_escape(header) for header in headers) + "\n")
@@ -192,6 +214,11 @@ def get_pdf_plan(payload: PdfPlanRequest) -> PdfPlanResponse:
         )
         for review_id, url in review_urls.items()
     ]
+
+    logger.info(
+        "Generated PDF plan.",
+        extra={"eligible_ids": len(payload.eligible_review_ids), "jobs": len(jobs), "output_dir": str(output_dir)},
+    )
 
     return PdfPlanResponse(output_dir=str(output_dir), jobs=jobs)
 

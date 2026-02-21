@@ -28,3 +28,8 @@
 - Backend logs parse/validation errors through standard app logger.
 - Electron logs backend spawn + renderer load failures in main process output.
 - UI shows operation status and progress percentage for fetch runs.
+
+### Log Files on Test Machines
+- Backend global log: `%LOCALAPPDATA%\\ReviewPackets\\logs\\reviewpackets.log`
+- Backend collaborator log: `%LOCALAPPDATA%\\ReviewPackets\\logs\\collaborator-backend.log`
+- Electron collaborator log: `%APPDATA%\\ReviewPackets\\logs\\collaborator-electron.log`
