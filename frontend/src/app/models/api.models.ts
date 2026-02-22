@@ -29,7 +29,7 @@ export interface ReviewIdsResponse {
 
 export interface ReviewHtmlItem {
   review_id: string;
-  html: string;
+  data: Record<string, any>;
 }
 
 export interface ValidationResultItem {

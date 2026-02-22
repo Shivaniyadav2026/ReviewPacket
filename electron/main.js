@@ -109,6 +109,144 @@ function getCollaboratorSession() {
   return session.fromPartition(COLLAB_SESSION_PARTITION);
 }
 
+function normalizeBaseUrl(baseUrl) {
+  return String(baseUrl || '').trim().replace(/\/+$/, '');
+}
+
+function buildJsonApiUrl(baseUrl) {
+  return `${normalizeBaseUrl(baseUrl)}/services/json/v1`;
+}
+
+async function postCollaboratorJson(baseUrl, payload) {
+  const ses = getCollaboratorSession();
+  if (typeof ses.fetch !== 'function') {
+    return {
+      ok: false,
+      error: {
+        code: 'SESSION_FETCH_UNAVAILABLE',
+        message: 'Electron session.fetch is not available in this runtime.'
+      }
+    };
+  }
+
+  const endpoint = buildJsonApiUrl(baseUrl);
+  writeCollaboratorLog('jsonapi:request', 'POST /services/json/v1', { endpoint, payload });
+
+  try {
+    const response = await ses.fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const bodyText = await response.text();
+    let body = {};
+    try {
+      body = bodyText ? JSON.parse(bodyText) : {};
+    } catch (parseError) {
+      body = { raw: bodyText };
+    }
+
+    writeCollaboratorLog('jsonapi:response', 'Received API response.', {
+      endpoint,
+      status: response.status,
+      ok: response.ok,
+      body
+    });
+
+    if (!response.ok) {
+      return {
+        ok: false,
+        error: {
+          code: `HTTP_${response.status}`,
+          message: `Collaborator JSON API failed with HTTP ${response.status}.`,
+          details: body
+        }
+      };
+    }
+
+    if (body && (body.error || body.exception)) {
+      return {
+        ok: false,
+        error: {
+          code: 'API_ERROR',
+          message: body.error?.message || body.exception?.message || 'Collaborator API returned an error.',
+          details: body
+        }
+      };
+    }
+
+    return { ok: true, data: body };
+  } catch (error) {
+    return {
+      ok: false,
+      error: {
+        code: 'NETWORK_ERROR',
+        message: error.message || 'Failed to call Collaborator JSON API.'
+      }
+    };
+  }
+}
+
+function candidateUserRequests(reviewId) {
+  const requestId = `${Date.now()}-${reviewId}`;
+  return [
+    {
+      id: requestId,
+      method: 'UserService.findUser',
+      params: { id: reviewId }
+    },
+    {
+      id: requestId,
+      method: 'UserService.findUser',
+      params: { userId: reviewId }
+    },
+    {
+      id: requestId,
+      method: 'UserService.findUser',
+      params: { name: reviewId }
+    },
+    {
+      id: requestId,
+      service: 'UserService',
+      command: 'findUser',
+      args: { id: reviewId }
+    },
+    {
+      id: requestId,
+      service: 'UserService',
+      command: 'findUser',
+      args: { userId: reviewId }
+    },
+    {
+      id: requestId,
+      method: 'ReviewService.findReview',
+      params: { id: reviewId }
+    },
+    {
+      id: requestId,
+      service: 'ReviewService',
+      command: 'findReview',
+      args: { id: reviewId }
+    }
+  ];
+}
+
+function extractUserPayload(apiResponse) {
+  const body = apiResponse || {};
+  const result = body.result || body.data || body.response || body;
+  if (Array.isArray(result?.users) && result.users.length > 0) {
+    return result.users[0];
+  }
+  if (Array.isArray(result) && result.length > 0) {
+    return result[0];
+  }
+  return result;
+}
+
 function createCollaboratorWindow(options = {}) {
   return new BrowserWindow({
     width: options.width || 1280,
@@ -147,32 +285,53 @@ ipcMain.handle('collaborator:open-login', async (_event, loginUrl) => {
   return { ok: true };
 });
 
-ipcMain.handle('collaborator:fetch-html', async (_event, pageUrl) => {
-  const url = String(pageUrl || '').trim();
-  if (!url) {
-    writeCollaboratorLog('fetch:error', 'Missing review URL.');
-    throw new Error('Collaborator review URL is required.');
+ipcMain.handle('collaborator:fetch-review-data', async (_event, payload) => {
+  const baseUrl = normalizeBaseUrl(payload?.baseUrl);
+  const reviewId = String(payload?.reviewId || '').trim();
+
+  if (!baseUrl || !reviewId) {
+    const error = {
+      code: 'INVALID_INPUT',
+      message: 'baseUrl and reviewId are required.'
+    };
+    writeCollaboratorLog('jsonapi:error', 'Invalid fetch-review-data request.', error);
+    return { data: {}, error };
   }
 
-  const win = createCollaboratorWindow();
-  writeCollaboratorLog('fetch', 'Fetching review HTML.', { url });
+  const cookies = await getCollaboratorSession().cookies.get({ url: baseUrl });
+  if (!cookies.length) {
+    const error = {
+      code: 'AUTH_REQUIRED',
+      message: 'No Collaborator session cookie found. Please login first.'
+    };
+    writeCollaboratorLog('jsonapi:error', 'Missing authenticated session.', { baseUrl, reviewId });
+    return { data: {}, error };
+  }
 
-  try {
-    await win.loadURL(url);
-    const html = await win.webContents.executeJavaScript('document.documentElement.outerHTML');
-    writeCollaboratorLog('fetch', 'Fetched review HTML successfully.', { url, htmlLength: html.length });
-    return { html };
-  } catch (error) {
-    writeCollaboratorLog('fetch:error', 'Failed to fetch review HTML.', {
-      url,
-      error: error.message || 'Unknown error'
-    });
-    throw error;
-  } finally {
-    if (!win.isDestroyed()) {
-      win.destroy();
+  for (const requestPayload of candidateUserRequests(reviewId)) {
+    const response = await postCollaboratorJson(baseUrl, requestPayload);
+    if (response.ok) {
+      const userData = extractUserPayload(response.data);
+      writeCollaboratorLog('jsonapi', 'Fetched review data from Collaborator JSON API.', {
+        reviewId,
+        keys: Object.keys(userData || {})
+      });
+      return { data: userData || {}, error: null };
     }
+    writeCollaboratorLog('jsonapi:retry', 'JSON API call variant failed, trying next.', {
+      reviewId,
+      requestPayload,
+      error: response.error
+    });
   }
+
+  const error = {
+    code: 'ALL_JSONAPI_METHODS_FAILED',
+    message: 'Unable to fetch data via Collaborator JSON API methods.',
+    reviewId
+  };
+  writeCollaboratorLog('jsonapi:error', 'All JSON API variants failed.', error);
+  return { data: {}, error };
 });
 
 ipcMain.handle('collaborator:download-pdfs', async (_event, jobs) => {

@@ -159,12 +159,22 @@ def parse_and_validate_reviews(payload: ParseValidateRequest) -> ParseValidateRe
     available_fields_set: set[str] = set()
 
     for review in payload.reviews:
-        parsed_fields = parser_service.parse_review_html(review.html)
+        parsed_fields = parser_service.parse_review_json(review.data)
+        logger.info(
+            "Parsed collaborator fields for review_id=%s: %s",
+            review.review_id,
+            parsed_fields,
+        )
         available_fields_set.update(parsed_fields.keys())
         validation_row = validation_service.validate(
             review_id=review.review_id,
             selected_fields=payload.selected_fields,
             parsed_fields=parsed_fields,
+        )
+        logger.info(
+            "Validation field values for review_id=%s: %s",
+            review.review_id,
+            validation_row.field_values,
         )
         results.append(
             ValidationResultItem(

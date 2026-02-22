@@ -57,7 +57,31 @@ export class AppComponent {
   collaboratorSelectedFields: string[] = [];
   collaboratorResults: ValidationResultItem[] = [];
   fetchProgress = 0;
-  private readonly collaboratorDefaultFields = ['Review Title', 'Role', 'Project', 'Overview', 'Participants', 'Defects'];
+  private readonly collaboratorDefaultFields = [
+    'Review Status',
+    'Review Title',
+    'Role',
+    'Created',
+    'Group',
+    'Template',
+    'Deadline',
+    'Completed on',
+    'Restricted Uploads/Deletions',
+    'Overview',
+    'Work Product Version',
+    'Meeting Details',
+    'Production Site',
+    'SW Criticality Level',
+    'Oversight Review Type',
+    'Review Effort (hh:mm)',
+    'Project',
+    'Aero - Project Name',
+    'Aero - Software load under work/test',
+    'Supporting Materials/Comments',
+    'Functional Area',
+    'Participants',
+    'Defects'
+  ];
 
   form!: FormGroup;
 
@@ -283,25 +307,28 @@ export class AppComponent {
     });
 
     try {
-      const htmlPayload: ReviewHtmlItem[] = [];
+      const reviewPayload: ReviewHtmlItem[] = [];
       const total = this.reviewIds.length;
       this.ensureSelectedFieldsForValidation();
 
       for (let i = 0; i < total; i++) {
         const reviewId = this.reviewIds[i];
-        const url = this.buildReviewUrl(reviewId);
-        const response = await api.fetchHtml(url);
-        htmlPayload.push({ review_id: reviewId, html: response.html });
+        const response = await api.fetchReviewData(this.collaboratorConfig.base_url, reviewId);
+        if (response?.error) {
+          this.logFlow('collaborator:error', 'Collaborator JSON API fetch failed.', { reviewId, error: response.error });
+          throw new Error(response.error.message || `Failed to fetch data for review ${reviewId}`);
+        }
+        reviewPayload.push({ review_id: reviewId, data: response.data || {} });
         this.fetchProgress = Math.round(((i + 1) * 100) / total);
-        this.logFlow('collaborator:fetch', 'Fetched review HTML.', {
+        this.logFlow('collaborator:fetch', 'Fetched collaborator JSON payload.', {
           reviewId,
           progress: this.fetchProgress,
-          htmlLength: response?.html?.length || 0
+          keys: Object.keys(response?.data || {}).length
         });
       }
 
       const parseResponse = await firstValueFrom(
-        this.api.parseValidateCollaboratorReviews(this.collaboratorSelectedFields, htmlPayload)
+        this.api.parseValidateCollaboratorReviews(this.collaboratorSelectedFields, reviewPayload)
       );
 
       this.availableCollaboratorFields = parseResponse?.available_fields || [];
@@ -309,6 +336,14 @@ export class AppComponent {
         this.collaboratorSelectedFields = [...this.availableCollaboratorFields];
       }
       this.collaboratorResults = parseResponse?.results || [];
+      this.collaboratorResults.forEach((row) => {
+        this.logFlow('collaborator:data', 'Parsed collaborator field values.', {
+          reviewId: row.review_id,
+          fieldValues: row.field_values,
+          status: row.status,
+          missingFields: row.missing_fields
+        });
+      });
       this.logFlow('collaborator', 'Parse + validate completed.', {
         availableFields: this.availableCollaboratorFields.length,
         results: this.collaboratorResults.length,
@@ -365,13 +400,6 @@ export class AppComponent {
     const result = await api.downloadPdfs(jobs);
     this.logFlow('collaborator', 'PDF download finished.', result);
     this.showInfo(`PDF complete: ${result.downloaded.length} success, ${result.failed.length} failed.`);
-  }
-
-  private buildReviewUrl(reviewId: string): string {
-    const config = this.collaboratorConfig;
-    const base = (config?.base_url || '').replace(/\/$/, '');
-    const path = (config?.review_path_template || '/user/{reviewId}').replace('{reviewId}', reviewId);
-    return `${base}${path}`;
   }
 
   private async ensureCollaboratorConfig(): Promise<boolean> {

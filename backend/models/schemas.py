@@ -42,7 +42,7 @@ class ReviewIdsResponse(BaseModel):
 
 class ReviewHtmlItem(BaseModel):
     review_id: str
-    html: str
+    data: dict
 
 
 class ParseValidateRequest(BaseModel):
