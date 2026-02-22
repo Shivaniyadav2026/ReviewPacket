@@ -19,7 +19,7 @@ def _resolve_log_dir() -> Path:
 
 
 LOG_DIR = _resolve_log_dir()
-LOG_FILE = LOG_DIR / "reviewpackets.log"
+LOG_FILE = LOG_DIR / "logs.txt"
 COLLABORATOR_LOG_FILE = LOG_DIR / "collaborator-backend.log"
 
 
@@ -33,7 +33,7 @@ def setup_logging() -> None:
         "%(asctime)s | %(levelname)s | %(name)s | %(message)s"
     )
 
-    file_handler = RotatingFileHandler(LOG_FILE, maxBytes=2_000_000, backupCount=3)
+    file_handler = RotatingFileHandler(LOG_FILE, maxBytes=5_000_000, backupCount=5)
     file_handler.setFormatter(formatter)
 
     console_handler = logging.StreamHandler()
@@ -44,17 +44,12 @@ def setup_logging() -> None:
 
     collaborator_logger = logging.getLogger("collaborator")
     collaborator_logger.setLevel(logging.INFO)
-    collaborator_logger.propagate = False
+    collaborator_logger.propagate = True
 
     collaborator_handler = RotatingFileHandler(
         COLLABORATOR_LOG_FILE,
-        maxBytes=2_000_000,
-        backupCount=3,
+        maxBytes=5_000_000,
+        backupCount=5,
     )
     collaborator_handler.setFormatter(formatter)
-
-    collaborator_console = logging.StreamHandler()
-    collaborator_console.setFormatter(formatter)
-
     collaborator_logger.addHandler(collaborator_handler)
-    collaborator_logger.addHandler(collaborator_console)

@@ -146,6 +146,11 @@ def get_collaborator_review_ids() -> ReviewIdsResponse:
 
 @router.post("/collaborator/parse-validate", response_model=ParseValidateResponse)
 def parse_and_validate_reviews(payload: ParseValidateRequest) -> ParseValidateResponse:
+    logger.info(
+        "Parse/validate payload received: selected_fields=%s review_count=%s",
+        payload.selected_fields,
+        len(payload.reviews),
+    )
     if not payload.selected_fields:
         logger.error("Parse/validate rejected: no selected fields.")
         raise HTTPException(status_code=400, detail="At least one field must be selected.")
@@ -159,7 +164,14 @@ def parse_and_validate_reviews(payload: ParseValidateRequest) -> ParseValidateRe
     available_fields_set: set[str] = set()
 
     for review in payload.reviews:
-        parsed_fields = parser_service.parse_review_json(review.data)
+        raw_data = review.data if isinstance(review.data, dict) else {}
+        if not isinstance(review.data, dict):
+            logger.warning(
+                "Review payload data is not a JSON object. review_id=%s type=%s",
+                review.review_id,
+                type(review.data).__name__,
+            )
+        parsed_fields = parser_service.parse_review_json(raw_data)
         logger.info(
             "Parsed collaborator fields for review_id=%s: %s",
             review.review_id,

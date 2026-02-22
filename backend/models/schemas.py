@@ -1,6 +1,6 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class DumpUploadResponse(BaseModel):
@@ -42,12 +42,12 @@ class ReviewIdsResponse(BaseModel):
 
 class ReviewHtmlItem(BaseModel):
     review_id: str
-    data: dict
+    data: dict = Field(default_factory=dict)
 
 
 class ParseValidateRequest(BaseModel):
-    selected_fields: list[str]
-    reviews: list[ReviewHtmlItem]
+    selected_fields: list[str] = Field(default_factory=list)
+    reviews: list[ReviewHtmlItem] = Field(default_factory=list)
 
 
 class ValidationResultItem(BaseModel):
