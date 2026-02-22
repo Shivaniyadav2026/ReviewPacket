@@ -59,42 +59,53 @@ def get_headers() -> list[str]:
 @router.post("/dump", response_model=DumpUploadResponse)
 async def upload_dump(file: UploadFile = File(...)) -> DumpUploadResponse:
     try:
+        logger.info("Dump upload started: filename=%s", file.filename)
         temp_path = _save_upload(file)
         df = dump_service.load_dump(temp_path)
+        logger.info("Dump upload completed: rows=%s, columns=%s", len(df), len(df.columns))
         return DumpUploadResponse(rows=len(df), columns=list(df.columns))
     except ValueError as exc:
+        logger.error("Dump upload failed: %s", str(exc))
         raise HTTPException(status_code=400, detail=str(exc))
 
 
 @router.post("/keys/file", response_model=KeysUploadResponse)
 async def upload_keys(file: UploadFile = File(...)) -> KeysUploadResponse:
     try:
+        logger.info("Keys file upload started: filename=%s", file.filename)
         temp_path = _save_upload(file)
         keys = keys_service.load_keys(temp_path)
+        logger.info("Keys file upload completed: count=%s", len(keys))
         return KeysUploadResponse(count=len(keys))
     except ValueError as exc:
+        logger.error("Keys file upload failed: %s", str(exc))
         raise HTTPException(status_code=400, detail=str(exc))
 
 
 @router.post("/keys/text", response_model=KeysUploadResponse)
 def set_keys_text(payload: KeysTextRequest) -> KeysUploadResponse:
     keys = keys_service.set_keys_from_text(payload.keys)
+    logger.info("Keys text applied: count=%s", len(keys))
     return KeysUploadResponse(count=len(keys))
 
 
 @router.post("/preview", response_model=PreviewResponse)
 def preview(payload: PreviewRequest) -> PreviewResponse:
     try:
+        logger.info("Preview generation started: filters=%s", payload.filters)
         df = preview_service.build_preview(payload.filters)
         rows = df.to_dict(orient="records")
+        logger.info("Preview generation completed: rows=%s", len(rows))
         return PreviewResponse(rows=rows)
     except ValueError as exc:
+        logger.error("Preview generation failed: %s", str(exc))
         raise HTTPException(status_code=400, detail=str(exc))
 
 
 @router.post("/export")
 def export_csv(payload: PreviewRequest) -> StreamingResponse:
     try:
+        logger.info("Preview CSV export started: filters=%s", payload.filters)
         df = preview_service.build_preview(payload.filters)
         buffer = io.StringIO()
         df.to_csv(buffer, index=False)
@@ -102,8 +113,10 @@ def export_csv(payload: PreviewRequest) -> StreamingResponse:
         headers = {
             "Content-Disposition": "attachment; filename=review_packets.csv"
         }
+        logger.info("Preview CSV export completed: rows=%s", len(df))
         return StreamingResponse(buffer, media_type="text/csv", headers=headers)
     except ValueError as exc:
+        logger.error("Preview CSV export failed: %s", str(exc))
         raise HTTPException(status_code=400, detail=str(exc))
 
 
@@ -161,6 +174,12 @@ def parse_and_validate_reviews(payload: ParseValidateRequest) -> ParseValidateRe
                 comment=validation_row.comment,
                 status=validation_row.status,
             )
+        )
+        logger.info(
+            "Review validated: review_id=%s, status=%s, missing=%s",
+            review.review_id,
+            validation_row.status,
+            validation_row.missing_fields,
         )
 
     complete_count = sum(1 for row in results if row.status == "Complete")

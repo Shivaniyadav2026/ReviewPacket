@@ -2,6 +2,7 @@
 
 contextBridge.exposeInMainWorld('reviewpackets', {
   version: '1.0.1',
+  log: (scope, message, metadata) => ipcRenderer.invoke('app:log', scope, message, metadata),
   collaborator: {
     openLogin: (loginUrl) => ipcRenderer.invoke('collaborator:open-login', loginUrl),
     fetchHtml: (pageUrl) => ipcRenderer.invoke('collaborator:fetch-html', pageUrl),

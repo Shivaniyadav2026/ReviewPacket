@@ -96,6 +96,11 @@
           <td mat-cell *matCellDef="let row">{{ row.review_id }}</td>
         </ng-container>
 
+        <ng-container *ngFor="let field of collaboratorSelectedFields" [matColumnDef]="fieldColumnName(field)">
+          <th mat-header-cell *matHeaderCellDef>{{ field }}</th>
+          <td mat-cell *matCellDef="let row">{{ row.field_values[field] || '' }}</td>
+        </ng-container>
+
         <ng-container matColumnDef="status">
           <th mat-header-cell *matHeaderCellDef>Status</th>
           <td mat-cell *matCellDef="let row">{{ row.status }}</td>
@@ -111,8 +116,8 @@
           <td mat-cell *matCellDef="let row">{{ row.comment }}</td>
         </ng-container>
 
-        <tr mat-header-row *matHeaderRowDef="collaboratorColumns"></tr>
-        <tr mat-row *matRowDef="let row; columns: collaboratorColumns"></tr>
+        <tr mat-header-row *matHeaderRowDef="collaboratorDisplayedColumns"></tr>
+        <tr mat-row *matRowDef="let row; columns: collaboratorDisplayedColumns"></tr>
       </table>
     </div>
   </div>

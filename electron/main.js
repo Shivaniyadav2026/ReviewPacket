@@ -239,6 +239,11 @@ ipcMain.handle('collaborator:has-session', async (_event, baseUrl) => {
   return { authenticated };
 });
 
+ipcMain.handle('app:log', async (_event, scope, message, metadata) => {
+  writeCollaboratorLog(String(scope || 'ui'), String(message || ''), metadata);
+  return { ok: true };
+});
+
 app.whenReady().then(() => {
   initCollaboratorLogs();
   startBackend();
