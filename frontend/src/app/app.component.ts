@@ -318,6 +318,10 @@ export class AppComponent {
           this.logFlow('collaborator:error', 'Collaborator JSON API fetch failed.', { reviewId, error: response.error });
           throw new Error(response.error.message || `Failed to fetch data for review ${reviewId}`);
         }
+        this.logFlow('collaborator:fetch:raw', 'Collaborator JSON payload received.', {
+          reviewId,
+          preview: this.safeStringify(response?.data, 2000)
+        });
         reviewPayload.push({ review_id: reviewId, data: response.data || {} });
         this.fetchProgress = Math.round(((i + 1) * 100) / total);
         this.logFlow('collaborator:fetch', 'Fetched collaborator JSON payload.', {
@@ -469,6 +473,18 @@ export class AppComponent {
       console.log(`[${scope}] ${message}`, metadata);
     } else {
       console.log(`[${scope}] ${message}`);
+    }
+  }
+
+  private safeStringify(value: any, maxLength: number): string {
+    try {
+      const text = JSON.stringify(value);
+      if (text.length <= maxLength) {
+        return text;
+      }
+      return `${text.slice(0, maxLength)}...`;
+    } catch {
+      return String(value ?? '');
     }
   }
 }
