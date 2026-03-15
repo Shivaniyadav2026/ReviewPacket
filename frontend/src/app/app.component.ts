@@ -41,6 +41,7 @@ import {
   templateUrl: './app.component.html'
 })
 export class AppComponent {
+  revisionVersion = 5;
   dumpFileName = '';
   keysFileName = '';
   headers: string[] = [];
@@ -96,6 +97,7 @@ export class AppComponent {
     this.form = this.fb.group({
       keysText: ['']
     });
+    this.logFlow('app', 'UI revision initialized.', { revision: this.revisionVersion });
     this.loadDefaults();
     this.loadCollaboratorConfig();
   }
