@@ -165,18 +165,22 @@ def parse_and_validate_reviews(payload: ParseValidateRequest) -> ParseValidateRe
     available_fields_set: set[str] = set()
 
     for review in payload.reviews:
-        raw_data = review.data if isinstance(review.data, dict) else {}
-        if not isinstance(review.data, dict):
-            logger.warning(
-                "Review payload data is not a JSON object. review_id=%s type=%s",
-                review.review_id,
-                type(review.data).__name__,
-            )
-        review_keys = list(raw_data.keys())
-        custom_fields = raw_data.get("customFields")
-        if isinstance(custom_fields, list):
-            custom_count = len(custom_fields)
+        raw_data = review.data
+        if isinstance(raw_data, dict):
+            review_keys = list(raw_data.keys())
+            custom_fields = raw_data.get("customFields")
+            custom_count = len(custom_fields) if isinstance(custom_fields, list) else 0
+        elif isinstance(raw_data, list):
+            review_keys = [f"[{index}]" for index, _ in enumerate(raw_data)]
+            custom_count = 0
         else:
+            logger.warning(
+                "Review payload data is not JSON object/list. review_id=%s type=%s",
+                review.review_id,
+                type(raw_data).__name__,
+            )
+            raw_data = {}
+            review_keys = []
             custom_count = 0
         logger.info(
             "Review payload keys: review_id=%s keys=%s customFieldsCount=%s",

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from pydantic import BaseModel, Field
 
 
@@ -43,7 +45,7 @@ class ReviewIdsResponse(BaseModel):
 
 class ReviewHtmlItem(BaseModel):
     review_id: str
-    data: dict = Field(default_factory=dict)
+    data: dict[str, Any] | list[Any] = Field(default_factory=dict)
 
 
 class ParseValidateRequest(BaseModel):
