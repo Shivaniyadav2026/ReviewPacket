@@ -18,6 +18,7 @@ export interface PreviewResponse {
 export interface CollaboratorConfigResponse {
   base_url: string;
   review_path_template: string;
+  json_api_path: string;
   request_timeout_seconds: number;
   max_retries: number;
   batch_size: number;

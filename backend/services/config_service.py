@@ -13,6 +13,7 @@ from backend.config import DEFAULT_COLLABORATOR_CONFIG_PATH
 class CollaboratorConfig(BaseModel):
     base_url: str = Field(alias="baseUrl")
     review_path_template: str = Field(alias="reviewPathTemplate")
+    json_api_path: str = Field(default="/services/json/v1", alias="jsonApiPath")
     request_timeout_seconds: int = Field(default=30, alias="requestTimeoutSeconds")
     max_retries: int = Field(default=2, alias="maxRetries")
     batch_size: int = Field(default=10, alias="batchSize")
@@ -22,6 +23,7 @@ DEFAULT_COLLABORATOR_CONFIG = CollaboratorConfig.model_validate(
     {
         "baseUrl": "https://collaborator.server.com",
         "reviewPathTemplate": "/user/{reviewId}",
+        "jsonApiPath": "/services/json/v1",
         "requestTimeoutSeconds": 30,
         "maxRetries": 2,
         "batchSize": 10,

@@ -125,11 +125,22 @@ function normalizeBaseUrl(baseUrl) {
   return String(baseUrl || '').trim().replace(/\/+$/, '');
 }
 
-function buildJsonApiUrl(baseUrl) {
-  return `${normalizeBaseUrl(baseUrl)}/services/json/v1`;
+function buildJsonApiUrl(baseUrl, jsonApiPath) {
+  const base = normalizeBaseUrl(baseUrl);
+  const path = String(jsonApiPath || '/services/json/v1').trim();
+  if (!path) {
+    return `${base}/services/json/v1`;
+  }
+  if (path.startsWith('http://') || path.startsWith('https://')) {
+    return path;
+  }
+  if (path.startsWith('/')) {
+    return `${base}${path}`;
+  }
+  return `${base}/${path}`;
 }
 
-async function postCollaboratorJson(baseUrl, payload) {
+async function postCollaboratorJson(baseUrl, jsonApiPath, payload) {
   const ses = getCollaboratorSession();
   if (typeof ses.fetch !== 'function') {
     return {
@@ -141,7 +152,7 @@ async function postCollaboratorJson(baseUrl, payload) {
     };
   }
 
-  const endpoint = buildJsonApiUrl(baseUrl);
+  const endpoint = buildJsonApiUrl(baseUrl, jsonApiPath);
   writeCollaboratorLog('jsonapi:request', 'POST /services/json/v1', { endpoint, payload });
 
   try {
@@ -329,6 +340,7 @@ ipcMain.handle('collaborator:fetch-review-data', async (_event, payload) => {
   const baseUrl = normalizeBaseUrl(payload?.baseUrl);
   const reviewId = String(payload?.reviewId || '').trim();
   const auth = payload?.auth || {};
+  const jsonApiPath = auth?.jsonApiPath;
 
   if (!baseUrl || !reviewId) {
     const error = {
@@ -380,7 +392,7 @@ ipcMain.handle('collaborator:fetch-review-data', async (_event, payload) => {
       });
     }
     batch.push(requestPayload);
-    const response = await postCollaboratorJson(baseUrl, batch);
+    const response = await postCollaboratorJson(baseUrl, jsonApiPath, batch);
     if (response.ok) {
       const userData = extractUserPayload(response.data);
       writeCollaboratorLog('jsonapi', 'Fetched review data from Collaborator JSON API.', {

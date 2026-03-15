@@ -127,6 +127,7 @@ def get_collaborator_config() -> CollaboratorConfigResponse:
     return CollaboratorConfigResponse(
         base_url=config.base_url,
         review_path_template=config.review_path_template,
+        json_api_path=config.json_api_path,
         request_timeout_seconds=config.request_timeout_seconds,
         max_retries=config.max_retries,
         batch_size=config.batch_size,

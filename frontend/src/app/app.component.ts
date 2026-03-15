@@ -319,7 +319,8 @@ export class AppComponent {
         const response = await api.fetchReviewData(this.collaboratorConfig.base_url, reviewId, {
           username: this.collaboratorUsername,
           ticket: this.collaboratorTicket,
-          cookie: this.collaboratorCookie
+          cookie: this.collaboratorCookie,
+          jsonApiPath: this.collaboratorConfig.json_api_path
         });
         if (response?.error) {
           this.logFlow('collaborator:error', 'Collaborator JSON API fetch failed.', { reviewId, error: response.error });

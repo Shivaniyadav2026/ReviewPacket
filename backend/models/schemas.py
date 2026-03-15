@@ -31,6 +31,7 @@ class ErrorResponse(BaseModel):
 class CollaboratorConfigResponse(BaseModel):
     base_url: str
     review_path_template: str
+    json_api_path: str
     request_timeout_seconds: int
     max_retries: int
     batch_size: int
