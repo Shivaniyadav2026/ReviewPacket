@@ -97,6 +97,7 @@ class ParserService:
 
         self._merge_named_field_list(fields, review.get("customFields"))
         self._merge_named_field_list(fields, review.get("internalCustomFields"))
+        self._merge_named_field_list(fields, review.get("internalCustomEields"))
         self._merge_named_field_list(fields, review.get("participantCustomFields"))
         self._merge_named_field_list(fields, review.get("checklistItemCustomFields"))
 
@@ -199,6 +200,10 @@ class ParserService:
                 continue
             name = self._scalar_to_text(entry.get("name"))
             raw_value = entry.get("value")
+            if raw_value is None:
+                raw_value = entry.get("value:")
+            if raw_value is None:
+                raw_value = entry.get("values")
             value = self._scalar_to_text(raw_value)
             if isinstance(raw_value, list):
                 value = ", ".join(self._scalar_to_text(item) for item in raw_value if self._scalar_to_text(item))

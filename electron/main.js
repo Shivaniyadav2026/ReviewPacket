@@ -191,6 +191,17 @@ async function postCollaboratorJson(baseUrl, jsonApiPath, payload) {
       };
     }
 
+    if (Array.isArray(body) && body.some((item) => item?.error || item?.errors || item?.exception)) {
+      return {
+        ok: false,
+        error: {
+          code: 'API_ERROR',
+          message: 'Collaborator API returned errors.',
+          details: body
+        }
+      };
+    }
+
     if (body && (body.error || body.exception)) {
       return {
         ok: false,
@@ -219,40 +230,24 @@ function candidateUserRequests(reviewId) {
   return [
     {
       id: requestId,
-      method: 'UserService.findUser',
-      params: { id: reviewId }
-    },
-    {
-      id: requestId,
-      method: 'UserService.findUser',
-      params: { userId: reviewId }
-    },
-    {
-      id: requestId,
-      method: 'UserService.findUser',
-      params: { name: reviewId }
-    },
-    {
-      id: requestId,
-      service: 'UserService',
-      command: 'findUser',
-      args: { id: reviewId }
-    },
-    {
-      id: requestId,
-      service: 'UserService',
-      command: 'findUser',
-      args: { userId: reviewId }
-    },
-    {
-      id: requestId,
-      method: 'ReviewService.findReview',
-      params: { id: reviewId }
+      command: 'ReviewService.findReviewById',
+      args: { reviewId: reviewId }
     },
     {
       id: requestId,
       service: 'ReviewService',
-      command: 'findReview',
+      command: 'findReviewById',
+      args: { reviewId: reviewId }
+    },
+    {
+      id: requestId,
+      command: 'ReviewService.findReviewById',
+      args: { id: reviewId }
+    },
+    {
+      id: requestId,
+      service: 'ReviewService',
+      command: 'findReviewById',
       args: { id: reviewId }
     }
   ];
