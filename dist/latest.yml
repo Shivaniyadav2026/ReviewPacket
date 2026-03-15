@@ -1,8 +1,8 @@
 version: 1.0.1
 files:
   - url: ReviewPackets-Setup-1.0.1.exe
-    sha512: KIKNZpVOUAaOJbOv0JqK5k2kiv/Rphzkz9Fg6zAyJ/7U5qWQ9MPkOaZnyg3TKJiMCcfIXLnjuWTaRU30a1LI6A==
-    size: 119274041
+    sha512: yrCZ4xXCltw5xPTlHTRTq4RpSRT/qvo38HhcHR1i/aiMPHfrinAPnCTgVJFZBIDnYBXzBy+F3hfpxXx92vyBCw==
+    size: 119278212
 path: ReviewPackets-Setup-1.0.1.exe
-sha512: KIKNZpVOUAaOJbOv0JqK5k2kiv/Rphzkz9Fg6zAyJ/7U5qWQ9MPkOaZnyg3TKJiMCcfIXLnjuWTaRU30a1LI6A==
-releaseDate: '2026-03-15T15:44:25.912Z'
+sha512: yrCZ4xXCltw5xPTlHTRTq4RpSRT/qvo38HhcHR1i/aiMPHfrinAPnCTgVJFZBIDnYBXzBy+F3hfpxXx92vyBCw==
+releaseDate: '2026-03-15T18:16:03.733Z'
