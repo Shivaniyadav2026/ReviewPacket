@@ -5,7 +5,8 @@ contextBridge.exposeInMainWorld('reviewpackets', {
   log: (scope, message, metadata) => ipcRenderer.invoke('app:log', scope, message, metadata),
   collaborator: {
     openLogin: (loginUrl) => ipcRenderer.invoke('collaborator:open-login', loginUrl),
-    fetchReviewData: (baseUrl, reviewId) => ipcRenderer.invoke('collaborator:fetch-review-data', { baseUrl, reviewId }),
+    fetchReviewData: (baseUrl, reviewId, auth) =>
+      ipcRenderer.invoke('collaborator:fetch-review-data', { baseUrl, reviewId, auth }),
     downloadPdfs: (jobs) => ipcRenderer.invoke('collaborator:download-pdfs', jobs),
     hasSession: (baseUrl) => ipcRenderer.invoke('collaborator:has-session', baseUrl)
   }

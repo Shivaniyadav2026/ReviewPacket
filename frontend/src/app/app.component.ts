@@ -57,6 +57,9 @@ export class AppComponent {
   collaboratorSelectedFields: string[] = [];
   collaboratorResults: ValidationResultItem[] = [];
   fetchProgress = 0;
+  collaboratorUsername = '';
+  collaboratorTicket = '';
+  collaboratorCookie = '';
   private readonly collaboratorDefaultFields = [
     'Review Status',
     'Review Title',
@@ -313,7 +316,11 @@ export class AppComponent {
 
       for (let i = 0; i < total; i++) {
         const reviewId = this.reviewIds[i];
-        const response = await api.fetchReviewData(this.collaboratorConfig.base_url, reviewId);
+        const response = await api.fetchReviewData(this.collaboratorConfig.base_url, reviewId, {
+          username: this.collaboratorUsername,
+          ticket: this.collaboratorTicket,
+          cookie: this.collaboratorCookie
+        });
         if (response?.error) {
           this.logFlow('collaborator:error', 'Collaborator JSON API fetch failed.', { reviewId, error: response.error });
           throw new Error(response.error.message || `Failed to fetch data for review ${reviewId}`);

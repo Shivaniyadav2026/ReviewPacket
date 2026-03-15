@@ -6,13 +6,18 @@ const { spawn } = require('child_process');
 let backendProcess = null;
 let loginWindow = null;
 let collaboratorLogFile = null;
+let unifiedLogFile = null;
+let backendLogDir = null;
 
 const COLLAB_SESSION_PARTITION = 'persist:collaborator';
 
 function initCollaboratorLogs() {
-  const logsDir = path.join(app.getPath('userData'), 'logs');
+  const localAppData = process.env.LOCALAPPDATA || app.getPath('userData');
+  const logsDir = path.join(localAppData, 'ReviewPackets', 'logs');
   fs.mkdirSync(logsDir, { recursive: true });
+  backendLogDir = logsDir;
   collaboratorLogFile = path.join(logsDir, 'collaborator-electron.log');
+  unifiedLogFile = path.join(logsDir, 'logs.txt');
   writeCollaboratorLog('startup', 'Collaborator logging initialized.');
 }
 
@@ -27,6 +32,9 @@ function writeCollaboratorLog(scope, message, metadata) {
 
     if (collaboratorLogFile) {
       fs.appendFileSync(collaboratorLogFile, line, 'utf8');
+    }
+    if (unifiedLogFile) {
+      fs.appendFileSync(unifiedLogFile, line, 'utf8');
     }
     console.log(`[collaborator] ${line.trim()}`);
   } catch (err) {
@@ -59,7 +67,11 @@ function startBackend() {
 
   backendProcess = spawn(command, args, {
     cwd,
-    windowsHide: true
+    windowsHide: true,
+    env: {
+      ...process.env,
+      REVIEWPACKETS_LOG_DIR: backendLogDir || path.join(process.env.LOCALAPPDATA || app.getPath('userData'), 'ReviewPackets', 'logs')
+    }
   });
 
   backendProcess.stdout.on('data', (data) => {
@@ -237,6 +249,17 @@ function candidateUserRequests(reviewId) {
 
 function extractUserPayload(apiResponse) {
   const body = apiResponse || {};
+  if (Array.isArray(body)) {
+    for (const item of body) {
+      if (item && item.result && typeof item.result === 'object') {
+        const result = item.result;
+        if (result.reviewId || result.title || result.displayText || result.reviewPhase) {
+          return result;
+        }
+      }
+    }
+    return body[0]?.result || body[0] || {};
+  }
   const result = body.result || body.data || body.response || body;
   if (Array.isArray(result?.users) && result.users.length > 0) {
     return result.users[0];
@@ -245,6 +268,23 @@ function extractUserPayload(apiResponse) {
     return result[0];
   }
   return result;
+}
+
+function parseCookieInput(cookieInput) {
+  const raw = String(cookieInput || '').trim();
+  if (!raw) {
+    return null;
+  }
+  const parts = raw.split(';')[0].split('=');
+  if (parts.length < 2) {
+    return null;
+  }
+  const name = parts.shift().trim();
+  const value = parts.join('=').trim();
+  if (!name || !value) {
+    return null;
+  }
+  return { name, value };
 }
 
 function createCollaboratorWindow(options = {}) {
@@ -288,6 +328,7 @@ ipcMain.handle('collaborator:open-login', async (_event, loginUrl) => {
 ipcMain.handle('collaborator:fetch-review-data', async (_event, payload) => {
   const baseUrl = normalizeBaseUrl(payload?.baseUrl);
   const reviewId = String(payload?.reviewId || '').trim();
+  const auth = payload?.auth || {};
 
   if (!baseUrl || !reviewId) {
     const error = {
@@ -296,6 +337,25 @@ ipcMain.handle('collaborator:fetch-review-data', async (_event, payload) => {
     };
     writeCollaboratorLog('jsonapi:error', 'Invalid fetch-review-data request.', error);
     return { data: {}, error };
+  }
+
+  const cookieInput = auth?.cookie;
+  const cookiePair = parseCookieInput(cookieInput);
+  if (cookiePair) {
+    try {
+      await getCollaboratorSession().cookies.set({
+        url: baseUrl,
+        name: cookiePair.name,
+        value: cookiePair.value
+      });
+      writeCollaboratorLog('jsonapi:auth', 'Manual cookie applied.', {
+        name: cookiePair.name
+      });
+    } catch (error) {
+      writeCollaboratorLog('jsonapi:auth', 'Failed to set manual cookie.', {
+        error: error.message || 'Unknown error'
+      });
+    }
   }
 
   const cookies = await getCollaboratorSession().cookies.get({ url: baseUrl });
@@ -308,8 +368,19 @@ ipcMain.handle('collaborator:fetch-review-data', async (_event, payload) => {
     return { data: {}, error };
   }
 
+  const username = String(auth?.username || '').trim();
+  const ticket = String(auth?.ticket || '').trim();
+
   for (const requestPayload of candidateUserRequests(reviewId)) {
-    const response = await postCollaboratorJson(baseUrl, requestPayload);
+    const batch = [];
+    if (username && ticket) {
+      batch.push({
+        command: 'SessionService.authenticate',
+        args: { login: username, ticket }
+      });
+    }
+    batch.push(requestPayload);
+    const response = await postCollaboratorJson(baseUrl, batch);
     if (response.ok) {
       const userData = extractUserPayload(response.data);
       writeCollaboratorLog('jsonapi', 'Fetched review data from Collaborator JSON API.', {

@@ -76,6 +76,21 @@
       <textarea matInput rows="4" [(ngModel)]="reviewIdsText"></textarea>
     </mat-form-field>
 
+    <div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:12px;">
+      <mat-form-field appearance="outline" style="flex:1; min-width:220px;">
+        <mat-label>Collaborator Username</mat-label>
+        <input matInput [(ngModel)]="collaboratorUsername" />
+      </mat-form-field>
+      <mat-form-field appearance="outline" style="flex:1; min-width:220px;">
+        <mat-label>Login Ticket</mat-label>
+        <input matInput [(ngModel)]="collaboratorTicket" />
+      </mat-form-field>
+      <mat-form-field appearance="outline" style="flex:1; min-width:240px;">
+        <mat-label>Cookie (JSESSIONID...)</mat-label>
+        <input matInput [(ngModel)]="collaboratorCookie" />
+      </mat-form-field>
+    </div>
+
     <mat-form-field appearance="outline" style="width:100%;">
       <mat-label>Fields to validate</mat-label>
       <mat-select multiple [(value)]="collaboratorSelectedFields">
