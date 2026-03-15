@@ -172,12 +172,31 @@ def parse_and_validate_reviews(payload: ParseValidateRequest) -> ParseValidateRe
                 review.review_id,
                 type(review.data).__name__,
             )
+        review_keys = list(raw_data.keys())
+        custom_fields = raw_data.get("customFields")
+        if isinstance(custom_fields, list):
+            custom_count = len(custom_fields)
+        else:
+            custom_count = 0
+        logger.info(
+            "Review payload keys: review_id=%s keys=%s customFieldsCount=%s",
+            review.review_id,
+            review_keys,
+            custom_count,
+        )
         parsed_fields = parser_service.parse_review_json(raw_data)
         logger.info(
             "Parsed collaborator fields for review_id=%s: %s",
             review.review_id,
             parsed_fields,
         )
+        for field_name in parser_service.REQUIRED_FIELDS:
+            logger.info(
+                "Field value: review_id=%s field=%s value=%s",
+                review.review_id,
+                field_name,
+                parsed_fields.get(field_name, ""),
+            )
         available_fields_set.update(parsed_fields.keys())
         validation_row = validation_service.validate(
             review_id=review.review_id,

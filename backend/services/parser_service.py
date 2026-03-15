@@ -95,11 +95,10 @@ class ParserService:
             review.get("restrictAccess")
         )
 
-        self._merge_named_field_list(fields, review.get("customFields"))
-        self._merge_named_field_list(fields, review.get("internalCustomFields"))
-        self._merge_named_field_list(fields, review.get("internalCustomEields"))
-        self._merge_named_field_list(fields, review.get("participantCustomFields"))
-        self._merge_named_field_list(fields, review.get("checklistItemCustomFields"))
+        self._merge_named_field_list(fields, self._get_list_field(review, ["customFields", "customfields", "custom_fields"]))
+        self._merge_named_field_list(fields, self._get_list_field(review, ["internalCustomFields", "internalcustomfields", "internal_custom_fields", "internalCustomEields"]))
+        self._merge_named_field_list(fields, self._get_list_field(review, ["participantCustomFields", "participantcustomfields", "participant_custom_fields"]))
+        self._merge_named_field_list(fields, self._get_list_field(review, ["checklistItemCustomFields", "checklistitemcustomfields", "checklist_item_custom_fields"]))
 
         flattened = self._flatten(review)
 
@@ -204,6 +203,8 @@ class ParserService:
                 raw_value = entry.get("value:")
             if raw_value is None:
                 raw_value = entry.get("values")
+            if raw_value is None:
+                raw_value = entry.get("value: [")
             value = self._scalar_to_text(raw_value)
             if isinstance(raw_value, list):
                 value = ", ".join(self._scalar_to_text(item) for item in raw_value if self._scalar_to_text(item))
@@ -221,3 +222,15 @@ class ParserService:
         for required in self.REQUIRED_FIELDS:
             normalized[required] = fields.get(required, "")
         return normalized
+
+    def _get_list_field(self, review: Mapping[str, Any], candidates: list[str]) -> Any:
+        for key in candidates:
+            if key in review:
+                return review.get(key)
+        # case-insensitive fallback
+        lower_map = {str(k).lower(): k for k in review.keys()}
+        for key in candidates:
+            match = lower_map.get(key.lower())
+            if match is not None:
+                return review.get(match)
+        return None
