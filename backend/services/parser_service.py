@@ -70,10 +70,15 @@ class ParserService:
     }
 
     def parse_review_json(self, payload: Mapping[str, Any] | None) -> dict[str, str]:
-        if not payload:
-            return self._empty_required_fields()
 
-        review = self._extract_review_object(payload)
+    if not payload:
+        return self._empty_required_fields()
+
+    # unwrap Collaborator JSON API wrapper
+    if isinstance(payload, dict) and "body" in payload:
+        payload = payload["body"]
+
+    review = self._extract_review_object(payload)
         if not review:
             return self._empty_required_fields()
 
@@ -221,20 +226,24 @@ class ParserService:
             if not isinstance(entry, Mapping):
                 continue
             name = self._scalar_to_text(entry.get("name"))
-            raw_value = (
-            entry.get("value")
-            or entry.get("value:")
-            or entry.get("values")
-            or entry.get("value: [")
-)
-            value = self._scalar_to_text(raw_value)
-            if isinstance(raw_value, list):
-                value = ", ".join(self._scalar_to_text(item) for item in raw_value if self._scalar_to_text(item))
-            if not name:
-                continue
-            canonical = self._canonicalize_key(name)
-            if canonical and value and not fields.get(canonical):
-                fields[canonical] = value
+
+         raw_value = entry.get("value")
+
+         # handle malformed keys like "value:" or "values"
+         if raw_value is None:
+         for k, v in entry.items():
+         if str(k).lower().startswith("value"):
+            raw_value = v
+            break
+
+        value = self._scalar_to_text(raw_value)
+        if isinstance(raw_value, list):
+            value = ", ".join(self._scalar_to_text(item) for item in raw_value if self._scalar_to_text(item))
+        if not name:
+            continue
+        canonical = self._canonicalize_key(name)
+        if canonical and value and not fields.get(canonical):
+            fields[canonical] = value
 
     def _empty_required_fields(self) -> dict[str, str]:
         return {required: "" for required in self.REQUIRED_FIELDS}
