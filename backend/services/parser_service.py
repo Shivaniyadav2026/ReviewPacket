@@ -50,6 +50,7 @@ class ParserService:
         "work product version": "Work Product Version",
         "meeting details": "Meeting Details",
         "production site": "Production Site",
+        "producing site": "Production Site",
         "sw criticality level": "SW Criticality Level",
         "oversight review type": "Oversight Review Type",
         "review effort (hh:mm)": "Review Effort (hh:mm)",
@@ -69,10 +70,37 @@ class ParserService:
 
     def parse_review_json(self, payload: Mapping[str, Any] | None) -> dict[str, str]:
         if not payload:
-            return {}
+            return self._empty_required_fields()
 
-        flattened = self._flatten(payload)
+        review = self._extract_review_object(payload)
+        if not review:
+            return self._empty_required_fields()
+
         fields: dict[str, str] = {}
+
+        fields["Review Status"] = self._scalar_to_text(
+            review.get("reviewPhase") or review.get("reviewStatus")
+        )
+        fields["Review Title"] = self._scalar_to_text(
+            review.get("title") or review.get("displayText")
+        )
+        fields["Created"] = self._scalar_to_text(review.get("creationDate"))
+        fields["Group"] = self._scalar_to_text(
+            review.get("groupName") or review.get("group") or review.get("groupGuid")
+        )
+        fields["Template"] = self._scalar_to_text(review.get("templateName"))
+        fields["Deadline"] = self._scalar_to_text(review.get("deadline"))
+        fields["Completed on"] = self._scalar_to_text(review.get("completedOn"))
+        fields["Restricted Uploads/Deletions"] = self._scalar_to_text(
+            review.get("restrictAccess")
+        )
+
+        self._merge_named_field_list(fields, review.get("customFields"))
+        self._merge_named_field_list(fields, review.get("internalCustomFields"))
+        self._merge_named_field_list(fields, review.get("participantCustomFields"))
+        self._merge_named_field_list(fields, review.get("checklistItemCustomFields"))
+
+        flattened = self._flatten(review)
 
         for key_path, value in flattened.items():
             if not value:
@@ -87,16 +115,11 @@ class ParserService:
                 canonical = ""
 
             if canonical:
-                fields.setdefault(canonical, value)
+                if not fields.get(canonical):
+                    fields[canonical] = value
 
         self._normalize_project_fields(fields)
-
-        # Include non-empty required fields even if not present, as empty values for deterministic output
-        normalized: dict[str, str] = {}
-        for required in self.REQUIRED_FIELDS:
-            normalized[required] = fields.get(required, "")
-
-        return normalized
+        return self._normalize_required_fields(fields)
 
     def _flatten(self, obj: Any, prefix: str = "") -> dict[str, str]:
         result: dict[str, str] = {}
@@ -151,3 +174,45 @@ class ParserService:
             fields["Aero - Project Name"] = project
         if aero_project and not project:
             fields["Project"] = aero_project
+
+    def _extract_review_object(self, payload: Any) -> dict[str, Any]:
+        if isinstance(payload, Mapping):
+            if "result" in payload and isinstance(payload["result"], Mapping):
+                return dict(payload["result"])
+            return dict(payload)
+
+        if isinstance(payload, list):
+            for item in payload:
+                if isinstance(item, Mapping) and isinstance(item.get("result"), Mapping):
+                    result = item["result"]
+                    if any(key in result for key in ("reviewId", "title", "displayText", "reviewPhase")):
+                        return dict(result)
+            return {}
+
+        return {}
+
+    def _merge_named_field_list(self, fields: dict[str, str], items: Any) -> None:
+        if not isinstance(items, list):
+            return
+        for entry in items:
+            if not isinstance(entry, Mapping):
+                continue
+            name = self._scalar_to_text(entry.get("name"))
+            raw_value = entry.get("value")
+            value = self._scalar_to_text(raw_value)
+            if isinstance(raw_value, list):
+                value = ", ".join(self._scalar_to_text(item) for item in raw_value if self._scalar_to_text(item))
+            if not name:
+                continue
+            canonical = self._canonicalize_key(name)
+            if canonical and value and not fields.get(canonical):
+                fields[canonical] = value
+
+    def _empty_required_fields(self) -> dict[str, str]:
+        return {required: "" for required in self.REQUIRED_FIELDS}
+
+    def _normalize_required_fields(self, fields: dict[str, str]) -> dict[str, str]:
+        normalized: dict[str, str] = {}
+        for required in self.REQUIRED_FIELDS:
+            normalized[required] = fields.get(required, "")
+        return normalized

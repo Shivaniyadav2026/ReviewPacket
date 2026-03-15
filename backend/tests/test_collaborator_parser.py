@@ -50,3 +50,37 @@ def test_parse_review_json_fallback_from_aero_project():
 
     assert fields["Aero - Project Name"] == "AER-999"
     assert fields["Project"] == "AER-999"
+
+
+def test_parse_review_json_extracts_custom_fields():
+    payload = {
+        "result": {
+            "reviewId": 60872,
+            "reviewPhase": "COMPLETED",
+            "title": "ABFMS-32559 SRD Updates",
+            "creationDate": "2025-07-28T19:29:40Z",
+            "groupGuid": "group-1",
+            "templateName": "Template A",
+            "deadline": "2025-08-01T00:00:00Z",
+            "restrictAccess": "GROUP_OR_PARTICIPANTS",
+            "customFields": [
+                {"name": "Work Product Version", "value": ["Initial commit id: 42f1"]},
+                {"name": "Aero - Project Name", "value": ["FMS Airbus"]},
+                {"name": "Producing Site", "value": ["North Phoenix"]},
+                {"name": "Overview", "value": ["Sample overview"]},
+                {"name": "Review Effort (hh:mm)", "value": ["06:30"]},
+            ],
+        }
+    }
+
+    parser = ParserService()
+    fields = parser.parse_review_json(payload)
+
+    assert fields["Review Status"] == "COMPLETED"
+    assert fields["Review Title"] == "ABFMS-32559 SRD Updates"
+    assert fields["Group"] == "group-1"
+    assert fields["Work Product Version"] == "Initial commit id: 42f1"
+    assert fields["Aero - Project Name"] == "FMS Airbus"
+    assert fields["Production Site"] == "North Phoenix"
+    assert fields["Overview"] == "Sample overview"
+    assert fields["Review Effort (hh:mm)"] == "06:30"
