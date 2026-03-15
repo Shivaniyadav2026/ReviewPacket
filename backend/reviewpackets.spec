@@ -1,8 +1,13 @@
-﻿# -*- mode: python ; coding: utf-8 -*-
+# -*- mode: python ; coding: utf-8 -*-
+
+import os
+
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 block_cipher = None
 
-from PyInstaller.utils.hooks import collect_data_files
+project_root = os.path.abspath(os.path.join(SPECPATH, '..'))
+backend_root = os.path.abspath(SPECPATH)
 
 data_files = (
     collect_data_files('pandas')
@@ -22,12 +27,12 @@ hidden_imports = [
     'python_multipart',
     'pandas',
     'openpyxl',
-]
+] + collect_submodules('backend')
 
 
 a = Analysis(
     ['main.py'],
-    pathex=['.'],
+    pathex=[project_root, backend_root],
     binaries=[],
     datas=data_files,
     hiddenimports=hidden_imports,
