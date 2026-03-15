@@ -300,6 +300,7 @@ missing module named httptools - imported by uvicorn.protocols.http.httptools_im
 missing module named a2wsgi - imported by uvicorn.middleware.wsgi (optional)
 missing module named win32evtlog - imported by logging.handlers (delayed, optional)
 missing module named win32evtlogutil - imported by logging.handlers (delayed, optional)
+invalid module named backend.services.parser_service - imported by backend.api.routes (top-level)
 missing module named orjson - imported by fastapi.responses (optional)
 missing module named ujson - imported by fastapi.responses (optional)
 missing module named dirty_equals - imported by fastapi.utils (delayed)

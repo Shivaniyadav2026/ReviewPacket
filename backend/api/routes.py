@@ -185,11 +185,7 @@ def parse_and_validate_reviews(payload: ParseValidateRequest) -> ParseValidateRe
             custom_count,
         )
         parsed_fields = parser_service.parse_review_json(raw_data)
-        logger.info(
-            "Parsed collaborator fields for review_id=%s: %s",
-            review.review_id,
-            parsed_fields,
-        )
+        logger.info("Parsed review object: %s", parsed_fields)
         for field_name in parser_service.REQUIRED_FIELDS:
             logger.info(
                 "Field value: review_id=%s field=%s value=%s",

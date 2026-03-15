@@ -49,8 +49,9 @@ class ParserService:
         "overview": "Overview",
         "work product version": "Work Product Version",
         "meeting details": "Meeting Details",
-        "production site": "Production Site",
         "producing site": "Production Site",
+        "producing-site": "Production Site",
+        "production site": "Production Site",
         "sw criticality level": "SW Criticality Level",
         "oversight review type": "Oversight Review Type",
         "review effort (hh:mm)": "Review Effort (hh:mm)",
@@ -176,20 +177,42 @@ class ParserService:
             fields["Project"] = aero_project
 
     def _extract_review_object(self, payload: Any) -> dict[str, Any]:
-        if isinstance(payload, Mapping):
-            if "result" in payload and isinstance(payload["result"], Mapping):
-                return dict(payload["result"])
-            return dict(payload)
 
-        if isinstance(payload, list):
-            for item in payload:
-                if isinstance(item, Mapping) and isinstance(item.get("result"), Mapping):
-                    result = item["result"]
-                    if any(key in result for key in ("reviewId", "title", "displayText", "reviewPhase")):
-                        return dict(result)
-            return {}
+    # Case 1: single object
+    if isinstance(payload, Mapping):
+
+        result = payload.get("result")
+
+        if isinstance(result, Mapping):
+            merged = {**payload, **result}
+            return merged
+
+        return dict(payload)
+
+    # Case 2: list response (Collaborator JSON API)
+    if isinstance(payload, list):
+
+        for item in payload:
+
+            if not isinstance(item, Mapping):
+                continue
+
+            result = item.get("result", {})
+
+            if isinstance(result, Mapping):
+                merged = {**item, **result}
+            else:
+                merged = dict(item)
+
+            if any(
+                key in merged
+                for key in ("reviewId", "title", "displayText", "reviewPhase")
+            ):
+                return merged
 
         return {}
+
+    return {}
 
     def _merge_named_field_list(self, fields: dict[str, str], items: Any) -> None:
         if not isinstance(items, list):
@@ -198,13 +221,12 @@ class ParserService:
             if not isinstance(entry, Mapping):
                 continue
             name = self._scalar_to_text(entry.get("name"))
-            raw_value = entry.get("value")
-            if raw_value is None:
-                raw_value = entry.get("value:")
-            if raw_value is None:
-                raw_value = entry.get("values")
-            if raw_value is None:
-                raw_value = entry.get("value: [")
+            raw_value = (
+            entry.get("value")
+            or entry.get("value:")
+            or entry.get("values")
+            or entry.get("value: [")
+)
             value = self._scalar_to_text(raw_value)
             if isinstance(raw_value, list):
                 value = ", ".join(self._scalar_to_text(item) for item in raw_value if self._scalar_to_text(item))
