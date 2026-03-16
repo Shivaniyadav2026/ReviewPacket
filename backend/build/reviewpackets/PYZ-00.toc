@@ -672,6 +672,10 @@
    'C:\\Users\\Anurag '
    'Srivastava\\Desktop\\Learning\\Practice\\ReviewPacket\\backend\\services\\keys_service.py',
    'PYMODULE'),
+  ('backend.services.parser_service',
+   'C:\\Users\\Anurag '
+   'Srivastava\\Desktop\\Learning\\Practice\\ReviewPacket\\backend\\services\\parser_service.py',
+   'PYMODULE'),
   ('backend.services.pdf_service',
    'C:\\Users\\Anurag '
    'Srivastava\\Desktop\\Learning\\Practice\\ReviewPacket\\backend\\services\\pdf_service.py',
