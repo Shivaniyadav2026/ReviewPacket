@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('reviewpackets', {
     fetchReviewData: (baseUrl, reviewId, auth) =>
       ipcRenderer.invoke('collaborator:fetch-review-data', { baseUrl, reviewId, auth }),
     downloadPdfs: (jobs) => ipcRenderer.invoke('collaborator:download-pdfs', jobs),
-    hasSession: (baseUrl) => ipcRenderer.invoke('collaborator:has-session', baseUrl)
+    hasSession: (baseUrl) => ipcRenderer.invoke('collaborator:has-session', baseUrl),
+    getAuth: () => ipcRenderer.invoke('collaborator:get-auth')
   }
 });

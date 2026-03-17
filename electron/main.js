@@ -8,16 +8,19 @@ let loginWindow = null;
 let collaboratorLogFile = null;
 let unifiedLogFile = null;
 let backendLogDir = null;
+let collaboratorAuthFile = null;
 
 const COLLAB_SESSION_PARTITION = 'persist:collaborator';
 
 function initCollaboratorLogs() {
   const localAppData = process.env.LOCALAPPDATA || app.getPath('userData');
-  const logsDir = path.join(localAppData, 'ReviewPackets', 'logs');
+  const appDir = path.join(localAppData, 'ReviewPackets');
+  const logsDir = path.join(appDir, 'logs');
   fs.mkdirSync(logsDir, { recursive: true });
   backendLogDir = logsDir;
   collaboratorLogFile = path.join(logsDir, 'collaborator-electron.log');
   unifiedLogFile = path.join(logsDir, 'logs.txt');
+  collaboratorAuthFile = path.join(appDir, 'collaborator-auth.json');
   writeCollaboratorLog('startup', 'Collaborator logging initialized.');
 }
 
@@ -253,44 +256,44 @@ function candidateUserRequests(reviewId) {
   ];
 }
 
-function extractUserPayload(apiResponse) {
-  const body = apiResponse || {};
-  if (Array.isArray(body)) {
-    for (const item of body) {
-      if (item && item.result && typeof item.result === 'object') {
-        const result = item.result;
-        if (result.reviewId || result.title || result.displayText || result.reviewPhase) {
-          return result;
-        }
-      }
+function loadStoredCollaboratorAuth() {
+  try {
+    if (!collaboratorAuthFile || !fs.existsSync(collaboratorAuthFile)) {
+      return { username: '', ticket: '' };
     }
-    return body[0]?.result || body[0] || {};
+    const raw = fs.readFileSync(collaboratorAuthFile, 'utf8');
+    const parsed = JSON.parse(raw || '{}');
+    return {
+      username: String(parsed.username || '').trim(),
+      ticket: String(parsed.ticket || '').trim()
+    };
+  } catch (error) {
+    writeCollaboratorLog('auth:error', 'Failed to load stored Collaborator auth.', {
+      error: error.message || 'Unknown error'
+    });
+    return { username: '', ticket: '' };
   }
-  const result = body.result || body.data || body.response || body;
-  if (Array.isArray(result?.users) && result.users.length > 0) {
-    return result.users[0];
-  }
-  if (Array.isArray(result) && result.length > 0) {
-    return result[0];
-  }
-  return result;
 }
 
-function parseCookieInput(cookieInput) {
-  const raw = String(cookieInput || '').trim();
-  if (!raw) {
-    return null;
+function saveStoredCollaboratorAuth(auth) {
+  try {
+    if (!collaboratorAuthFile) {
+      return;
+    }
+    const payload = {
+      username: String(auth?.username || '').trim(),
+      ticket: String(auth?.ticket || '').trim()
+    };
+    fs.writeFileSync(collaboratorAuthFile, JSON.stringify(payload, null, 2), 'utf8');
+    writeCollaboratorLog('auth', 'Stored Collaborator auth details locally.', {
+      username: payload.username ? 'saved' : 'empty',
+      ticket: payload.ticket ? 'saved' : 'empty'
+    });
+  } catch (error) {
+    writeCollaboratorLog('auth:error', 'Failed to store Collaborator auth.', {
+      error: error.message || 'Unknown error'
+    });
   }
-  const parts = raw.split(';')[0].split('=');
-  if (parts.length < 2) {
-    return null;
-  }
-  const name = parts.shift().trim();
-  const value = parts.join('=').trim();
-  if (!name || !value) {
-    return null;
-  }
-  return { name, value };
 }
 
 function createCollaboratorWindow(options = {}) {
@@ -346,25 +349,6 @@ ipcMain.handle('collaborator:fetch-review-data', async (_event, payload) => {
     return { data: {}, error };
   }
 
-  const cookieInput = auth?.cookie;
-  const cookiePair = parseCookieInput(cookieInput);
-  if (cookiePair) {
-    try {
-      await getCollaboratorSession().cookies.set({
-        url: baseUrl,
-        name: cookiePair.name,
-        value: cookiePair.value
-      });
-      writeCollaboratorLog('jsonapi:auth', 'Manual cookie applied.', {
-        name: cookiePair.name
-      });
-    } catch (error) {
-      writeCollaboratorLog('jsonapi:auth', 'Failed to set manual cookie.', {
-        error: error.message || 'Unknown error'
-      });
-    }
-  }
-
   const cookies = await getCollaboratorSession().cookies.get({ url: baseUrl });
   if (!cookies.length) {
     const error = {
@@ -375,8 +359,13 @@ ipcMain.handle('collaborator:fetch-review-data', async (_event, payload) => {
     return { data: {}, error };
   }
 
-  const username = String(auth?.username || '').trim();
-  const ticket = String(auth?.ticket || '').trim();
+  const storedAuth = loadStoredCollaboratorAuth();
+  const username = String(auth?.username || storedAuth.username || '').trim();
+  const ticket = String(auth?.ticket || storedAuth.ticket || '').trim();
+
+  if (username || ticket) {
+    saveStoredCollaboratorAuth({ username, ticket });
+  }
 
   for (const requestPayload of candidateUserRequests(reviewId)) {
     const batch = [];
@@ -389,10 +378,11 @@ ipcMain.handle('collaborator:fetch-review-data', async (_event, payload) => {
     batch.push(requestPayload);
     const response = await postCollaboratorJson(baseUrl, jsonApiPath, batch);
     if (response.ok) {
-      const userData = extractUserPayload(response.data);
+      const userData = response.data;
       writeCollaboratorLog('jsonapi', 'Fetched review data from Collaborator JSON API.', {
         reviewId,
-        keys: Object.keys(userData || {})
+        payloadType: Array.isArray(userData) ? 'array' : typeof userData,
+        keys: userData && !Array.isArray(userData) ? Object.keys(userData || {}) : []
       });
       return { data: userData || {}, error: null };
     }
@@ -410,6 +400,15 @@ ipcMain.handle('collaborator:fetch-review-data', async (_event, payload) => {
   };
   writeCollaboratorLog('jsonapi:error', 'All JSON API variants failed.', error);
   return { data: {}, error };
+});
+
+ipcMain.handle('collaborator:get-auth', async () => {
+  const auth = loadStoredCollaboratorAuth();
+  writeCollaboratorLog('auth', 'Loaded stored Collaborator auth for renderer.', {
+    username: auth.username ? 'present' : 'empty',
+    ticket: auth.ticket ? 'present' : 'empty'
+  });
+  return auth;
 });
 
 ipcMain.handle('collaborator:download-pdfs', async (_event, jobs) => {

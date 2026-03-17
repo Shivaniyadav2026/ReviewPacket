@@ -1,5 +1,6 @@
 import { Component, ElementRef, HostListener, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { HttpEventType } from '@angular/common/http';
 import { FormBuilder, ReactiveFormsModule, FormGroup, FormsModule } from '@angular/forms';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatCardModule } from '@angular/material/card';
@@ -43,6 +44,7 @@ import {
   templateUrl: './app.component.html'
 })
 export class AppComponent {
+  private readonly collapsedCellWordLimit = 10;
   revisionVersion = 5;
   dumpFileName = '';
   keysFileName = '';
@@ -60,7 +62,6 @@ export class AppComponent {
   expandedCollaboratorCellId: string | null = null;
   private dumpLoaderStartedAt = 0;
   private dumpLoaderRunId = 0;
-  private dumpLoaderIntervalId: number | null = null;
 
   collaboratorConfig: CollaboratorConfigResponse | null = null;
   reviewIds: string[] = [];
@@ -71,7 +72,6 @@ export class AppComponent {
   fetchProgress = 0;
   collaboratorUsername = '';
   collaboratorTicket = '';
-  collaboratorCookie = '';
   private readonly collaboratorDefaultFields = [
     'Review Status',
     'Review Title',
@@ -113,6 +113,7 @@ export class AppComponent {
     this.logFlow('app', 'UI revision initialized.', { revision: this.revisionVersion });
     this.loadDefaults();
     this.loadCollaboratorConfig();
+    this.loadStoredCollaboratorAuth();
   }
 
   loadDefaults(): void {
@@ -121,7 +122,7 @@ export class AppComponent {
       next: (filters) => {
         this.defaultFilters = filters;
         this.selectedFilters = this.filterableHeaders.length
-          ? filters.filter((filter) => this.filterableHeaders.includes(filter))
+          ? this.resolveDefaultFilters()
           : [...filters];
         this.logFlow('app', 'Default filters loaded.', { count: filters.length });
       },
@@ -163,12 +164,21 @@ export class AppComponent {
         this.finishDumpLoader();
       }))
       .subscribe({
-        next: (response) => {
-          this.resetForNewDump();
-          this.headers = this.consolidateHeaderList(response.columns);
-          this.selectedFilters = this.defaultFilters.filter((filter) => this.filterableHeaders.includes(filter));
-          this.logFlow('dump', 'Dump upload complete.', { rows: response.rows, columns: response.columns.length });
-          this.showInfo(`Loaded ${response.rows} rows.`);
+        next: (event) => {
+          if (event.type === HttpEventType.UploadProgress) {
+            const total = event.total || file.size || 1;
+            this.dumpLoadProgress = Math.min(Math.round((event.loaded / total) * 90), 90);
+            return;
+          }
+
+          if (event.type === HttpEventType.Response && event.body) {
+            const response = event.body;
+            this.resetForNewDump();
+            this.headers = this.consolidateHeaderList(response.columns);
+            this.selectedFilters = this.resolveDefaultFilters();
+            this.logFlow('dump', 'Dump upload complete.', { rows: response.rows, columns: response.columns.length });
+            this.showInfo(`Loaded ${response.rows} rows.`);
+          }
         },
         error: (err) => {
           this.logFlow('dump:error', 'Dump upload failed.', err?.error || err?.message);
@@ -399,7 +409,6 @@ export class AppComponent {
         const response = await api.fetchReviewData(this.collaboratorConfig.base_url, reviewId, {
           username: this.collaboratorUsername,
           ticket: this.collaboratorTicket,
-          cookie: this.collaboratorCookie,
           jsonApiPath: this.collaboratorConfig.json_api_path
         });
         if (response?.error) {
@@ -534,6 +543,25 @@ export class AppComponent {
 
   private getElectronCollaboratorApi(): any {
     return (window as any).reviewpackets?.collaborator;
+  }
+
+  private async loadStoredCollaboratorAuth(): Promise<void> {
+    const api = this.getElectronCollaboratorApi();
+    if (!api?.getAuth) {
+      return;
+    }
+
+    try {
+      const auth = await api.getAuth();
+      this.collaboratorUsername = auth?.username || '';
+      this.collaboratorTicket = auth?.ticket || '';
+      this.logFlow('collaborator', 'Loaded stored collaborator auth.', {
+        username: this.collaboratorUsername ? 'present' : 'empty',
+        ticket: this.collaboratorTicket ? 'present' : 'empty'
+      });
+    } catch (error: any) {
+      this.logFlow('collaborator:error', 'Failed to load stored collaborator auth.', error?.message || error);
+    }
   }
 
   fieldColumnName(field: string): string {
@@ -692,7 +720,7 @@ export class AppComponent {
     if (this.isCollaboratorCellExpanded(rowIndex, column)) {
       return value || '';
     }
-    return this.truncateWords(value || '', 30);
+    return this.truncateWords(value || '', this.collapsedCellWordLimit);
   }
 
   previewCellId(rowIndex: number, column: string): string {
@@ -713,7 +741,7 @@ export class AppComponent {
     if (this.isPreviewCellExpanded(rowIndex, column)) {
       return value;
     }
-    return this.truncateWords(value, 30);
+    return this.truncateWords(value, this.collapsedCellWordLimit);
   }
 
   isPreviewRowComplete(row: Record<string, string>): boolean {
@@ -780,16 +808,6 @@ export class AppComponent {
     this.dumpLoaderStartedAt = Date.now();
     this.isDumpLoading = true;
     this.dumpLoadProgress = 0;
-    if (this.dumpLoaderIntervalId !== null) {
-      window.clearInterval(this.dumpLoaderIntervalId);
-    }
-    const runId = this.dumpLoaderRunId;
-    this.dumpLoaderIntervalId = window.setInterval(() => {
-      if (runId !== this.dumpLoaderRunId) {
-        return;
-      }
-      this.dumpLoadProgress = Math.min(this.dumpLoadProgress + 5, 90);
-    }, 100);
     this.logFlow('dump', 'Dump loader started.', { minVisibleMs: 2000 });
   }
 
@@ -801,10 +819,6 @@ export class AppComponent {
     window.setTimeout(() => {
       if (runId !== this.dumpLoaderRunId) {
         return;
-      }
-      if (this.dumpLoaderIntervalId !== null) {
-        window.clearInterval(this.dumpLoaderIntervalId);
-        this.dumpLoaderIntervalId = null;
       }
       this.dumpLoadProgress = 100;
       this.isDumpLoading = false;
@@ -835,5 +849,28 @@ export class AppComponent {
 
   private normalizeHeaderLabel(header: string): string {
     return header.trim().replace(/\.\d+$/, '');
+  }
+
+  private resolveDefaultFilters(): string[] {
+    const selected: string[] = [];
+    for (const defaultFilter of this.defaultFilters) {
+      const matchedHeader = this.filterableHeaders.find(
+        (header) => this.normalizeFilterMatchKey(header) === this.normalizeFilterMatchKey(defaultFilter)
+      );
+      if (matchedHeader && !selected.includes(matchedHeader)) {
+        selected.push(matchedHeader);
+      }
+    }
+    return selected;
+  }
+
+  private normalizeFilterMatchKey(value: string): string {
+    return value
+      .trim()
+      .toLowerCase()
+      .replace(/^custom field\s*\(/, '')
+      .replace(/\)$/, '')
+      .replace(/^components\//, 'component/')
+      .replace(/\s+/g, ' ');
   }
 }

@@ -1,5 +1,5 @@
 ﻿import { Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpEvent } from '@angular/common/http';
 import { Observable } from 'rxjs';
 
 import {
@@ -31,10 +31,13 @@ export class ApiService {
     return this.http.get<string[]>(`${this.baseUrl}/headers`);
   }
 
-  uploadDump(file: File): Observable<DumpUploadResponse> {
+  uploadDump(file: File): Observable<HttpEvent<DumpUploadResponse>> {
     const formData = new FormData();
     formData.append('file', file);
-    return this.http.post<DumpUploadResponse>(`${this.baseUrl}/dump`, formData);
+    return this.http.post<DumpUploadResponse>(`${this.baseUrl}/dump`, formData, {
+      observe: 'events',
+      reportProgress: true
+    });
   }
 
   uploadKeys(file: File): Observable<KeysUploadResponse> {
