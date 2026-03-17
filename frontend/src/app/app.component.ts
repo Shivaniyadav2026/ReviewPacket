@@ -1,4 +1,4 @@
-﻿import { Component } from '@angular/core';
+﻿import { Component, ElementRef, HostListener, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, ReactiveFormsModule, FormGroup, FormsModule } from '@angular/forms';
 import { MatToolbarModule } from '@angular/material/toolbar';
@@ -47,9 +47,15 @@ export class AppComponent {
   headers: string[] = [];
   defaultFilters: string[] = [];
   selectedFilters: string[] = [];
+  filterSearchText = '';
+  isFilterDropdownOpen = false;
   previewRows: Record<string, string>[] = [];
   displayedColumns: string[] = [];
   isLoading = false;
+  isDumpLoading = false;
+  expandedPreviewCellId: string | null = null;
+  private dumpLoaderStartedAt = 0;
+  private dumpLoaderRunId = 0;
 
   collaboratorConfig: CollaboratorConfigResponse | null = null;
   reviewIds: string[] = [];
@@ -88,6 +94,8 @@ export class AppComponent {
   ];
 
   form!: FormGroup;
+  @ViewChild('filterSearchInput') filterSearchInput?: ElementRef<HTMLInputElement>;
+  @ViewChild('filterDropdownContainer') filterDropdownContainer?: ElementRef<HTMLElement>;
 
   constructor(
     private api: ApiService,
@@ -107,7 +115,9 @@ export class AppComponent {
     this.api.getDefaultFilters().subscribe({
       next: (filters) => {
         this.defaultFilters = filters;
-        this.selectedFilters = [...filters];
+        this.selectedFilters = this.filterableHeaders.length
+          ? filters.filter((filter) => this.filterableHeaders.includes(filter))
+          : [...filters];
         this.logFlow('app', 'Default filters loaded.', { count: filters.length });
       },
       error: () => {
@@ -139,13 +149,19 @@ export class AppComponent {
     const file = input.files[0];
     this.dumpFileName = file.name;
     this.isLoading = true;
+    this.startDumpLoader();
     this.logFlow('dump', 'Uploading dump file.', { file: file.name, size: file.size });
 
     this.api.uploadDump(file)
-      .pipe(finalize(() => (this.isLoading = false)))
+      .pipe(finalize(() => {
+        this.isLoading = false;
+        this.finishDumpLoader();
+      }))
       .subscribe({
         next: (response) => {
-          this.headers = response.columns;
+          this.resetForNewDump();
+          this.headers = this.consolidateHeaderList(response.columns);
+          this.selectedFilters = this.defaultFilters.filter((filter) => this.filterableHeaders.includes(filter));
           this.logFlow('dump', 'Dump upload complete.', { rows: response.rows, columns: response.columns.length });
           this.showInfo(`Loaded ${response.rows} rows.`);
         },
@@ -233,32 +249,89 @@ export class AppComponent {
       return;
     }
 
-    this.api.exportCsv({ filters: this.selectedFilters }).subscribe({
-      next: (blob) => {
-        this.logFlow('preview', 'Exporting preview CSV.', { size: blob.size });
-        this.downloadBlob(blob, 'review_packets.csv');
-      },
-      error: (err) => {
-        this.logFlow('preview:error', 'Preview CSV export failed.', err?.error || err?.message);
-        this.showError(err?.error?.detail || 'Failed to export CSV.');
-      }
-    });
+    if (this.previewRows.length === 0) {
+      this.logFlow('preview:error', 'CSV export rejected: no preview rows.');
+      this.showError('Generate preview before exporting.');
+      return;
+    }
+
+    const headers = ['Issue Key', 'Summary', ...this.selectedFilters, 'Comment'];
+    const lines = [
+      headers.map((header) => this.escapeCsvValue(header)).join(','),
+      ...this.previewRows.map((row) =>
+        headers.map((header) => this.escapeCsvValue(row[header] || '')).join(',')
+      )
+    ];
+
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    this.logFlow('preview', 'Exporting preview CSV.', { rows: this.previewRows.length });
+    this.downloadBlob(blob, 'review_packets.csv');
   }
 
-  loadReviewIdsFromDump(): void {
-    this.logFlow('collaborator', 'Loading review IDs from dump.');
-    this.api.getCollaboratorReviewIds().subscribe({
-      next: (response) => {
-        this.reviewIds = response.review_ids;
-        this.reviewIdsText = this.reviewIds.join(', ');
-        this.logFlow('collaborator', 'Review IDs loaded from dump.', { count: this.reviewIds.length });
-        this.showInfo(`Loaded ${this.reviewIds.length} review IDs from Review Info.`);
-      },
-      error: (err) => {
-        this.logFlow('collaborator:error', 'Failed to load review IDs from dump.', err?.error || err?.message);
-        this.showError(err?.error?.detail || 'Failed to extract review IDs.');
+  exportCompletedReviewInfoCsv(): void {
+    if (this.previewRows.length === 0) {
+      this.logFlow('preview:error', 'Review-info CSV export rejected: no preview rows.');
+      this.showError('Generate preview before exporting review IDs.');
+      return;
+    }
+
+    const completedRows = this.previewRows.filter((row) => this.isPreviewRowComplete(row));
+    if (completedRows.length === 0) {
+      this.logFlow('preview:error', 'Review-info CSV export rejected: no completed rows.');
+      this.showError('No preview rows with "Review completed" comment.');
+      return;
+    }
+
+    const headers = ['Issue Key', 'Review Info', 'Extracted Review IDs'];
+    const lines = [
+      headers.map((header) => this.escapeCsvValue(header)).join(','),
+      ...completedRows.map((row) =>
+        [
+          row['Issue Key'] || '',
+          row['Review Info'] || '',
+          this.extractReviewIdsFromReviewInfo(row['Review Info'] || '')
+        ]
+          .map((value) => this.escapeCsvValue(value))
+          .join(',')
+      )
+    ];
+
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    this.logFlow('preview', 'Exporting completed review-info CSV.', { rows: completedRows.length });
+    this.downloadBlob(blob, 'completed_review_info.csv');
+  }
+
+  loadReviewIdsFromPreview(): void {
+    if (this.previewRows.length === 0) {
+      this.logFlow('collaborator:error', 'Load review IDs rejected: preview not generated.');
+      this.showError('Generate preview first.');
+      return;
+    }
+
+    const reviewIds: string[] = [];
+    for (const row of this.previewRows) {
+      if (!this.isPreviewRowComplete(row)) {
+        continue;
       }
-    });
+
+      const extracted = this.extractReviewIdsFromReviewInfo(row['Review Info'] || '');
+      for (const reviewId of extracted.split(',').map((value) => value.trim()).filter((value) => value)) {
+        if (!reviewIds.includes(reviewId)) {
+          reviewIds.push(reviewId);
+        }
+      }
+    }
+
+    this.reviewIds = reviewIds;
+    this.reviewIdsText = this.reviewIds.join(', ');
+    this.logFlow('collaborator', 'Review IDs loaded from preview.', { count: this.reviewIds.length });
+
+    if (this.reviewIds.length === 0) {
+      this.showError('No review IDs found in preview rows marked Review completed.');
+      return;
+    }
+
+    this.showInfo(`Loaded ${this.reviewIds.length} review IDs from completed preview rows.`);
   }
 
   applyReviewIdsFromText(): void {
@@ -332,7 +405,11 @@ export class AppComponent {
           reviewId,
           preview: this.safeStringify(response?.data, 2000)
         });
-        reviewPayload.push({ review_id: reviewId, data: response.data || {} });
+        reviewPayload.push({
+          review_id: reviewId,
+          // Keep request shape compatible with older packaged backends that still expect a dict.
+          data: { body: response.data || {} }
+        });
         this.fetchProgress = Math.round(((i + 1) * 100) / total);
         this.logFlow('collaborator:fetch', 'Fetched collaborator JSON payload.', {
           reviewId,
@@ -458,9 +535,145 @@ export class AppComponent {
     return `field__${field}`;
   }
 
+  get filteredHeaders(): string[] {
+    const search = this.filterSearchText.trim().toLowerCase();
+    if (!search) {
+      return this.filterableHeaders;
+    }
+    return this.filterableHeaders.filter((header) => header.toLowerCase().includes(search));
+  }
+
+  private escapeCsvValue(value: string): string {
+    const text = String(value ?? '').replace(/"/g, '""');
+    return `"${text}"`;
+  }
+
+  private extractReviewIdsFromReviewInfo(reviewInfo: string): string {
+    const text = String(reviewInfo || '').trim();
+    if (!text) {
+      return '';
+    }
+
+    const reviewIds: string[] = [];
+    const addId = (value: string): void => {
+      if (value && !reviewIds.includes(value)) {
+        reviewIds.push(value);
+      }
+    };
+
+    const patterns = [
+      /\breview\s*:?\s*id\s*[=:]\s*(\d{5})\b/gi,
+      /\breviewid\s*[=:]\s*(\d{5})\b/gi,
+      /\breview\s*packet\s*[:=]\s*(\d{5})\b/gi,
+      /\breview\s*#\s*(\d{5})\b/gi,
+      /#\s*(\d{5})\b/g
+    ];
+
+    for (const pattern of patterns) {
+      for (const match of text.matchAll(pattern)) {
+        addId(match[1]);
+      }
+    }
+
+    if (reviewIds.length > 0) {
+      return reviewIds.join(', ');
+    }
+
+    if (/^\s*\d{5}(\s*[,;]\s*\d{5})*\s*$/.test(text)) {
+      for (const match of text.matchAll(/\b(\d{5})\b/g)) {
+        addId(match[1]);
+      }
+    }
+
+    return reviewIds.join(', ');
+  }
+
+  get areAllHeadersSelected(): boolean {
+    return this.filterableHeaders.length > 0 && this.selectedFilters.length === this.filterableHeaders.length;
+  }
+
+  get filterableHeaders(): string[] {
+    return this.headers.filter((header) => !this.isReservedPreviewColumn(header));
+  }
+
+  get selectedFiltersLabel(): string {
+    const count = this.selectedFilters.length;
+    if (count === 0) {
+      return 'No filters selected';
+    }
+    if (count === 1) {
+      return '1 filter selected';
+    }
+    return `${count} filters selected`;
+  }
+
+  toggleSelectAllFilters(): void {
+    this.selectedFilters = this.areAllHeadersSelected ? [] : [...this.filterableHeaders];
+    this.logFlow('preview', 'Toggled select-all filters.', { selectedCount: this.selectedFilters.length });
+  }
+
+  openFilterDropdown(): void {
+    if (this.isFilterDropdownOpen) {
+      return;
+    }
+    this.isFilterDropdownOpen = true;
+  }
+
+  onFilterSearchInput(event: Event): void {
+    this.openFilterDropdown();
+    this.filterSearchText = (event.target as HTMLInputElement).value;
+  }
+
+  toggleFilterSelection(header: string): void {
+    if (this.selectedFilters.includes(header)) {
+      this.selectedFilters = this.selectedFilters.filter((item) => item !== header);
+      return;
+    }
+    this.selectedFilters = [...this.selectedFilters, header];
+  }
+
+  isFilterSelected(header: string): boolean {
+    return this.selectedFilters.includes(header);
+  }
+
+  closeFilterDropdown(): void {
+    this.isFilterDropdownOpen = false;
+    this.filterSearchText = '';
+  }
+
+  @HostListener('document:click', ['$event'])
+  onDocumentClick(event: MouseEvent): void {
+    if (!this.isFilterDropdownOpen) {
+      return;
+    }
+    const target = event.target as Node | null;
+    const container = this.filterDropdownContainer?.nativeElement;
+    if (container && target && !container.contains(target)) {
+      this.closeFilterDropdown();
+    }
+  }
+
   get collaboratorDisplayedColumns(): string[] {
     const selectedFieldColumns = this.collaboratorSelectedFields.map((field) => this.fieldColumnName(field));
     return ['review_id', ...selectedFieldColumns, 'status', 'missing_fields', 'comment'];
+  }
+
+  previewCellId(rowIndex: number, column: string): string {
+    return `${rowIndex}::${column}`;
+  }
+
+  isPreviewCellExpanded(rowIndex: number, column: string): boolean {
+    return this.expandedPreviewCellId === this.previewCellId(rowIndex, column);
+  }
+
+  togglePreviewCell(rowIndex: number, column: string): void {
+    const cellId = this.previewCellId(rowIndex, column);
+    this.expandedPreviewCellId = this.expandedPreviewCellId === cellId ? null : cellId;
+  }
+
+  isPreviewRowComplete(row: Record<string, string>): boolean {
+    const comment = (row['Comment'] || '').trim().toLowerCase();
+    return comment === 'review completed' || comment === 'review complete';
   }
 
   private showError(message: string): void {
@@ -496,5 +709,69 @@ export class AppComponent {
     } catch {
       return String(value ?? '');
     }
+  }
+
+  private resetForNewDump(): void {
+    this.headers = [];
+    this.filterSearchText = '';
+    this.selectedFilters = [];
+    this.previewRows = [];
+    this.displayedColumns = [];
+    this.expandedPreviewCellId = null;
+    this.keysFileName = '';
+    this.form.patchValue({ keysText: '' });
+    this.reviewIds = [];
+    this.reviewIdsText = '';
+    this.availableCollaboratorFields = [];
+    this.collaboratorSelectedFields = [];
+    this.collaboratorResults = [];
+    this.fetchProgress = 0;
+    this.logFlow('dump', 'Cleared previous dump state and fetched data.');
+  }
+
+  private startDumpLoader(): void {
+    this.dumpLoaderRunId += 1;
+    this.dumpLoaderStartedAt = Date.now();
+    this.isDumpLoading = true;
+    this.logFlow('dump', 'Dump loader started.', { minVisibleMs: 5000 });
+  }
+
+  private finishDumpLoader(): void {
+    const runId = this.dumpLoaderRunId;
+    const elapsed = Date.now() - this.dumpLoaderStartedAt;
+    const remaining = Math.max(0, 5000 - elapsed);
+
+    window.setTimeout(() => {
+      if (runId !== this.dumpLoaderRunId) {
+        return;
+      }
+      this.isDumpLoading = false;
+      this.logFlow('dump', 'Dump loader stopped.', { elapsedMs: Date.now() - this.dumpLoaderStartedAt });
+    }, remaining);
+  }
+
+  private isReservedPreviewColumn(header: string): boolean {
+    const normalized = header.trim().toLowerCase();
+    return normalized === 'issue key' || normalized === 'summary';
+  }
+
+  private consolidateHeaderList(headers: string[]): string[] {
+    const seen = new Set<string>();
+    const consolidated: string[] = [];
+
+    for (const header of headers) {
+      const normalized = this.normalizeHeaderLabel(header);
+      if (seen.has(normalized.toLowerCase())) {
+        continue;
+      }
+      seen.add(normalized.toLowerCase());
+      consolidated.push(normalized);
+    }
+
+    return consolidated;
+  }
+
+  private normalizeHeaderLabel(header: string): string {
+    return header.trim().replace(/\.\d+$/, '');
   }
 }
