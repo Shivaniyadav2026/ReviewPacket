@@ -1,4 +1,4 @@
-﻿import { Component, ElementRef, HostListener, ViewChild } from '@angular/core';
+import { Component, ElementRef, HostListener, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, ReactiveFormsModule, FormGroup, FormsModule } from '@angular/forms';
 import { MatToolbarModule } from '@angular/material/toolbar';
@@ -10,6 +10,7 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatTableModule } from '@angular/material/table';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { finalize } from 'rxjs/operators';
 import { firstValueFrom } from 'rxjs';
 
@@ -36,7 +37,8 @@ import {
     MatSelectModule,
     MatTableModule,
     MatSnackBarModule,
-    MatProgressSpinnerModule
+    MatProgressSpinnerModule,
+    MatProgressBarModule
   ],
   templateUrl: './app.component.html'
 })
@@ -53,9 +55,12 @@ export class AppComponent {
   displayedColumns: string[] = [];
   isLoading = false;
   isDumpLoading = false;
+  dumpLoadProgress = 0;
   expandedPreviewCellId: string | null = null;
+  expandedCollaboratorCellId: string | null = null;
   private dumpLoaderStartedAt = 0;
   private dumpLoaderRunId = 0;
+  private dumpLoaderIntervalId: number | null = null;
 
   collaboratorConfig: CollaboratorConfigResponse | null = null;
   reviewIds: string[] = [];
@@ -548,6 +553,14 @@ export class AppComponent {
     return `"${text}"`;
   }
 
+  private truncateWords(value: string, limit: number): string {
+    const words = String(value || '').trim().split(/\s+/).filter((word) => word);
+    if (words.length <= limit) {
+      return value;
+    }
+    return `${words.slice(0, limit).join(' ')}...`;
+  }
+
   private extractReviewIdsFromReviewInfo(reviewInfo: string): string {
     const text = String(reviewInfo || '').trim();
     if (!text) {
@@ -607,6 +620,10 @@ export class AppComponent {
     return `${count} filters selected`;
   }
 
+  get completedPreviewCount(): number {
+    return this.previewRows.filter((row) => this.isPreviewRowComplete(row)).length;
+  }
+
   toggleSelectAllFilters(): void {
     this.selectedFilters = this.areAllHeadersSelected ? [] : [...this.filterableHeaders];
     this.logFlow('preview', 'Toggled select-all filters.', { selectedCount: this.selectedFilters.length });
@@ -658,6 +675,26 @@ export class AppComponent {
     return ['review_id', ...selectedFieldColumns, 'status', 'missing_fields', 'comment'];
   }
 
+  collaboratorCellId(rowIndex: number, column: string): string {
+    return `${rowIndex}::${column}`;
+  }
+
+  isCollaboratorCellExpanded(rowIndex: number, column: string): boolean {
+    return this.expandedCollaboratorCellId === this.collaboratorCellId(rowIndex, column);
+  }
+
+  toggleCollaboratorCell(rowIndex: number, column: string): void {
+    const cellId = this.collaboratorCellId(rowIndex, column);
+    this.expandedCollaboratorCellId = this.expandedCollaboratorCellId === cellId ? null : cellId;
+  }
+
+  collaboratorCellDisplayValue(value: string, rowIndex: number, column: string): string {
+    if (this.isCollaboratorCellExpanded(rowIndex, column)) {
+      return value || '';
+    }
+    return this.truncateWords(value || '', 30);
+  }
+
   previewCellId(rowIndex: number, column: string): string {
     return `${rowIndex}::${column}`;
   }
@@ -669,6 +706,14 @@ export class AppComponent {
   togglePreviewCell(rowIndex: number, column: string): void {
     const cellId = this.previewCellId(rowIndex, column);
     this.expandedPreviewCellId = this.expandedPreviewCellId === cellId ? null : cellId;
+  }
+
+  previewCellDisplayValue(row: Record<string, string>, rowIndex: number, column: string): string {
+    const value = row[column] || '';
+    if (this.isPreviewCellExpanded(rowIndex, column)) {
+      return value;
+    }
+    return this.truncateWords(value, 30);
   }
 
   isPreviewRowComplete(row: Record<string, string>): boolean {
@@ -718,6 +763,7 @@ export class AppComponent {
     this.previewRows = [];
     this.displayedColumns = [];
     this.expandedPreviewCellId = null;
+    this.expandedCollaboratorCellId = null;
     this.keysFileName = '';
     this.form.patchValue({ keysText: '' });
     this.reviewIds = [];
@@ -733,18 +779,34 @@ export class AppComponent {
     this.dumpLoaderRunId += 1;
     this.dumpLoaderStartedAt = Date.now();
     this.isDumpLoading = true;
-    this.logFlow('dump', 'Dump loader started.', { minVisibleMs: 5000 });
+    this.dumpLoadProgress = 0;
+    if (this.dumpLoaderIntervalId !== null) {
+      window.clearInterval(this.dumpLoaderIntervalId);
+    }
+    const runId = this.dumpLoaderRunId;
+    this.dumpLoaderIntervalId = window.setInterval(() => {
+      if (runId !== this.dumpLoaderRunId) {
+        return;
+      }
+      this.dumpLoadProgress = Math.min(this.dumpLoadProgress + 5, 90);
+    }, 100);
+    this.logFlow('dump', 'Dump loader started.', { minVisibleMs: 2000 });
   }
 
   private finishDumpLoader(): void {
     const runId = this.dumpLoaderRunId;
     const elapsed = Date.now() - this.dumpLoaderStartedAt;
-    const remaining = Math.max(0, 5000 - elapsed);
+    const remaining = Math.max(0, 2000 - elapsed);
 
     window.setTimeout(() => {
       if (runId !== this.dumpLoaderRunId) {
         return;
       }
+      if (this.dumpLoaderIntervalId !== null) {
+        window.clearInterval(this.dumpLoaderIntervalId);
+        this.dumpLoaderIntervalId = null;
+      }
+      this.dumpLoadProgress = 100;
       this.isDumpLoading = false;
       this.logFlow('dump', 'Dump loader stopped.', { elapsedMs: Date.now() - this.dumpLoaderStartedAt });
     }, remaining);
