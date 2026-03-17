@@ -2,12 +2,20 @@
 
 APP_NAME = "ReviewPackets"
 DEFAULT_FILTERS = [
-    "Summary",
+    "Affects Version/s",
+    "Components/s",
     "Priority",
     "Status",
-    "Review Info",
-    "Solution",
+    "Fix Version/s",
+    "Labels",
     "Description",
+    "Category of Task",
+    "Affected Subsystem/s",
+    "Epic Link",
+    "Acceptance Criteria",
+    "Solution",
+    "Review Info",
+    "Issue Links",
 ]
 
 MAX_UPLOAD_MB = 200

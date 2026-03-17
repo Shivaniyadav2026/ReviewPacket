@@ -5,6 +5,7 @@ import pandas as pd
 
 from backend.repositories.data_store import DATA_STORE
 from backend.utils.file_loader import load_table
+from backend.utils.merge import consolidated_headers
 
 
 class DumpService:
@@ -17,13 +18,14 @@ class DumpService:
 
         with DATA_STORE.lock:
             DATA_STORE.dump_df = df
+            DATA_STORE.issue_keys = []
         return df
 
     def get_headers(self) -> list[str]:
         with DATA_STORE.lock:
             if DATA_STORE.dump_df is None:
                 return []
-            return list(DATA_STORE.dump_df.columns)
+            return consolidated_headers(list(DATA_STORE.dump_df.columns))
 
     def _find_column(self, df: pd.DataFrame, name: str) -> str | None:
         target = name.strip().lower()

@@ -1,5 +1,5 @@
-﻿import pandas as pd
-from backend.utils.merge import merge_duplicate_columns
+import pandas as pd
+from backend.utils.merge import merge_duplicate_columns, consolidated_headers, normalize_header_name
 
 
 def test_merge_duplicate_columns():
@@ -22,4 +22,10 @@ def test_merge_duplicate_columns_concat():
     columns = ["Issue Key", "Solution", "Solution.1"]
     df = pd.DataFrame(data, columns=columns)
     merged = merge_duplicate_columns(df)
-    assert merged.loc[0, "Solution"] in ("A | B", "B | A")
+    assert merged.loc[0, "Solution"] in ("A, B", "B, A")
+
+
+def test_consolidated_headers_removes_suffix_variants():
+    headers = ["Components/s", "Components/s.1", "Components/s.2", "Priority"]
+    assert consolidated_headers(headers) == ["Components/s", "Priority"]
+    assert normalize_header_name("Components/s.2") == "Components/s"

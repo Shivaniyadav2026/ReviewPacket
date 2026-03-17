@@ -45,7 +45,7 @@ class ReviewIdsResponse(BaseModel):
 
 class ReviewHtmlItem(BaseModel):
     review_id: str
-    data: dict[str, Any] | list[Any] = Field(default_factory=dict)
+    data: Any = Field(default_factory=dict)
 
 
 class ParseValidateRequest(BaseModel):

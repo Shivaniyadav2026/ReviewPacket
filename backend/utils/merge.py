@@ -3,6 +3,8 @@
 import pandas as pd
 import re
 
+_DUPLICATE_HEADER_PATTERN = re.compile(r"^(.*)\.(\d+)$")
+
 
 def _normalize_value(value: object) -> str:
     if value is None:
@@ -18,7 +20,7 @@ def merge_duplicate_columns(df: pd.DataFrame) -> pd.DataFrame:
         return df
 
     columns = list(df.columns)
-    normalized_columns = _normalize_duplicate_headers(columns)
+    normalized_columns = normalize_duplicate_headers(columns)
     seen = set()
     merged_columns = []
     merged_data = []
@@ -34,14 +36,8 @@ def merge_duplicate_columns(df: pd.DataFrame) -> pd.DataFrame:
             merged_data.append(df.iloc[:, duplicate_indices[0]])
             continue
 
-        # Merge duplicate columns by concatenating non-empty values
-        merged_series = df.iloc[:, duplicate_indices[0]].copy()
-        for col_index in duplicate_indices[1:]:
-            next_series = df.iloc[:, col_index]
-            merged_series = merged_series.combine(
-                next_series,
-                lambda left, right: _merge_cell_values(left, right),
-            )
+        duplicate_frame = df.iloc[:, duplicate_indices]
+        merged_series = duplicate_frame.apply(_merge_row_values, axis=1)
 
         merged_columns.append(name)
         merged_data.append(merged_series)
@@ -51,18 +47,31 @@ def merge_duplicate_columns(df: pd.DataFrame) -> pd.DataFrame:
     return merged_df
 
 
-def _normalize_duplicate_headers(columns: list[object]) -> list[str]:
+def normalize_header_name(name: object) -> str:
+    text = str(name).strip()
+    match = _DUPLICATE_HEADER_PATTERN.match(text)
+    if match:
+        return match.group(1).strip()
+    return text
+
+
+def normalize_duplicate_headers(columns: list[object]) -> list[str]:
     normalized = []
     raw_names = [str(col).strip() for col in columns]
-    base_set = set(raw_names)
-    pattern = re.compile(r"^(.*)\\.(\\d+)$")
     for name in raw_names:
-        match = pattern.match(name)
-        if match and match.group(1) in base_set:
-            normalized.append(match.group(1))
-        else:
-            normalized.append(name)
+        normalized.append(normalize_header_name(name))
     return normalized
+
+
+def consolidated_headers(columns: list[object]) -> list[str]:
+    headers: list[str] = []
+    seen: set[str] = set()
+    for name in normalize_duplicate_headers(columns):
+        if name in seen:
+            continue
+        seen.add(name)
+        headers.append(name)
+    return headers
 
 
 def _merge_cell_values(left: object, right: object) -> str:
@@ -77,4 +86,11 @@ def _merge_cell_values(left: object, right: object) -> str:
         return left_text
     if right_text in left_text:
         return left_text
-    return f"{left_text} | {right_text}"
+    return f"{left_text}, {right_text}"
+
+
+def _merge_row_values(row: pd.Series) -> str:
+    merged = ""
+    for value in row.tolist():
+        merged = _merge_cell_values(merged, value)
+    return merged

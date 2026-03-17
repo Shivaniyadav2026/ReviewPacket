@@ -62,8 +62,9 @@ async def upload_dump(file: UploadFile = File(...)) -> DumpUploadResponse:
         logger.info("Dump upload started: filename=%s", file.filename)
         temp_path = _save_upload(file)
         df = dump_service.load_dump(temp_path)
-        logger.info("Dump upload completed: rows=%s, columns=%s", len(df), len(df.columns))
-        return DumpUploadResponse(rows=len(df), columns=list(df.columns))
+        headers = dump_service.get_headers()
+        logger.info("Dump upload completed: rows=%s, columns=%s", len(df), len(headers))
+        return DumpUploadResponse(rows=len(df), columns=headers)
     except ValueError as exc:
         logger.error("Dump upload failed: %s", str(exc))
         raise HTTPException(status_code=400, detail=str(exc))
