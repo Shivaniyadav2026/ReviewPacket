@@ -11,6 +11,16 @@ from backend.services.config_service import ConfigService
 
 class CollaboratorService:
     REVIEW_INFO_COLUMN = "Review Info"
+    _EXCLUDED_ID_PATTERN = re.compile(r"\bABFMS\s*[-:=]\s*(\d{5})\b", re.IGNORECASE)
+    _REVIEW_ID_PATTERNS = (
+        re.compile(r"\breview\s*:?\s*id\s*[=:]\s*(\d{5})\b", re.IGNORECASE),
+        re.compile(r"\breviewid\s*[=:]\s*(\d{5})\b", re.IGNORECASE),
+        re.compile(r"\breview\s*packet\s*[:=]\s*(\d{5})\b", re.IGNORECASE),
+        re.compile(r"\breview\s*#\s*(\d{5})\b", re.IGNORECASE),
+        re.compile(r"#\s*(\d{5})\b"),
+    )
+    _STANDALONE_ID_PATTERN = re.compile(r"^\s*\d{5}(\s*[,;]\s*\d{5})*\s*$")
+    _FIVE_DIGIT_PATTERN = re.compile(r"\b(\d{5})\b")
 
     def __init__(self) -> None:
         self._config_service = ConfigService()
@@ -48,8 +58,29 @@ class CollaboratorService:
     def _normalize_review_ids(self, values: Iterable[str]) -> list[str]:
         review_ids: list[str] = []
         for value in values:
-            for token in re.split(r"[,;\n\t ]+", str(value).strip()):
-                clean = token.strip()
-                if clean:
-                    review_ids.append(clean)
+            review_ids.extend(self._extract_review_ids_from_text(str(value)))
         return review_ids
+
+    def _extract_review_ids_from_text(self, text: str) -> list[str]:
+        cleaned = str(text).strip()
+        if not cleaned:
+            return []
+
+        excluded_ids = {match.group(1) for match in self._EXCLUDED_ID_PATTERN.finditer(cleaned)}
+        matched_ids: list[str] = []
+
+        for pattern in self._REVIEW_ID_PATTERNS:
+            for match in pattern.finditer(cleaned):
+                review_id = match.group(1)
+                if review_id not in matched_ids:
+                    matched_ids.append(review_id)
+
+        if matched_ids:
+            return matched_ids
+
+        if self._STANDALONE_ID_PATTERN.fullmatch(cleaned):
+            for review_id in self._FIVE_DIGIT_PATTERN.findall(cleaned):
+                if review_id not in excluded_ids and review_id not in matched_ids:
+                    matched_ids.append(review_id)
+
+        return matched_ids
