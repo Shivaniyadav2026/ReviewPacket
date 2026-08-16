@@ -173,7 +173,7 @@
     <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px;">
       <button mat-flat-button color="primary" (click)="fetchAndValidateCollaborator()">Fetch + Validate Reviews</button>
       <button mat-stroked-button color="accent" (click)="exportCollaboratorCsv()" [disabled]="!collaboratorResults.length">Export Collaborator CSV</button>
-      <button mat-stroked-button color="accent" (click)="downloadCollaboratorPdfs()" [disabled]="!collaboratorResults.length">Download Complete PDFs</button>
+      <button mat-stroked-button color="accent" (click)="downloadCollaboratorPdfs()" [disabled]="!hasCompleteReviews">Download Complete PDFs</button>
     </div>
 
     <div *ngIf="isLoading && fetchProgress > 0" style="padding: 4px 0 12px 0; display:flex; align-items:center; gap:12px;">

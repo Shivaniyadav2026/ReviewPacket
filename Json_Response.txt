@@ -1,0 +1,160 @@
+
+
+I got the json responce
+
+I have used this body 
+
+[
+  {
+    "command": "SessionService.authenticate",
+    "args": { "login": "yourUser", "password": "yourPassword" }
+  },
+  {
+    "command": "ReviewService.findReviewById",
+    "args": { "reviewId": "60872" }
+  }
+]
+
+The resposne is 
+
+[
+  {
+   "result" : { }
+},
+{
+  "result": {
+      "creator": {
+    "fullName": "abc",
+    "id" : 1111,
+    "login" : 323nn          
+},
+
+  "creationDate": "2025-07-28T19:29:40Z",
+  "lastActivity": "2025-08-01T23:35.28Z", 
+  "reviewPhase": "COMPLETED",
+  "displayText": "Review #60872: I"ABFMS-32559 SRD Updates & ABFMS-32560 Code updatesI"",
+  "title": "ABFMS-32559 SRD Updates & ABFMS-32560 Code updates",
+  "groupGuid": "d07dbe5d-1c8e-4118-8ace-7167c3630231", 
+  "templateName": "AERO DO-178B/178C template", 
+  "deadline": "2025-08-01T00:00:00Z", 
+  "restrictAccess": "GROUP_OR_PARTICIPANTS", 
+  "customFields": [ 
+   {
+     "name": "Work Product Version",
+     "value: "[ "Initial commit id: 42f13037e11 | Story Branch: https://acsjira.honeywell.com/browse/ABFMS-32560 | Epic Branch: ps://acsjira.honeywell.com/browse/ABFMS-31889" ]
+    }, 
+   {
+     "name": "Aero - Project Name",
+     "value": [ 
+            "FMS Airbus"
+         ]
+   },
+   {
+     "name": "Producing Site", 
+     "value":[ "North Phoenix" ]
+     },
+   {
+     "name": "Overview", 
+     "value": [  "* The following applies to all Pull Requests to TBOLT_2 1 REBASE THMNXA"
+              ]
+      },
+    {
+      "name": "SW Criticality Level", 
+      "value": [ 
+         "B"
+        ] 
+     },
+     {
+       "name": "Review Effort (hh:mm)", 
+       "value": [ 
+          "06:30"
+        ]
+      },
+     {
+       "name": "Aero - Software load under work/test",
+       "value": [ 
+         "CR1" 
+         ]
+      },
+      {
+        "name": "Supporting Materials/Comments",
+        "value": [
+           "MCDU FPLN Latest Baseline DTS requirements: https://0yi"
+             ]
+       },
+       {
+         "name": "Oversight Review Type",
+         "value": [ "No Oversight Needed" ] 
+       },
+       {
+         "name": "Rework Disposition status",
+         "value": []
+       },
+       { 
+         "name": "Work Product Location",
+         "value": [
+            "DnG & feature/ABFMS-32560-mcdu-post-rd145-page-wmt-fixed-in-rd-private-ibuild-ci-code" ]
+       },
+       {
+        "name": "Meeting Details", 
+        "value": [
+             ""  ]
+       },
+       {
+         "name": "Rework Effort",
+         "value": [
+             ""
+          ]
+       },
+       {
+         "name": "Functional Area",
+         "value": [ "CI" ]
+       },
+       {
+         "name": "Work Product Type",
+         "value": [ "Code" ]
+       }
+      ],
+       "internalCustomEields": [
+        {
+          "name": "JiraIssueId",
+          "value": [
+              ""
+             ]
+            }
+       ],
+        "participantCustomFields": [ 
+           {
+             "name": "Aero Expertise",
+             "value": [ 
+                ""
+               ]
+           },
+         {
+           "name": "Reviewer Type", 
+           "value": []
+         },
+         { 
+          "name": "Review Effort (hh:mm)",
+          "value": [
+            ""
+           ] 
+         }
+       ],
+        "checklistItemCustomFields": [ 
+        {
+          "name": "Comments", 
+          "value": [ 
+              ""
+            ]
+          },
+         {
+           "name": "Pass/Fail",
+           "value": []
+         }
+         ],
+        "reviewId": 60872
+}
+}
+}
+]

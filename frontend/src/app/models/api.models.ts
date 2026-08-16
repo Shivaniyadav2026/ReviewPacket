@@ -30,7 +30,7 @@ export interface ReviewIdsResponse {
 
 export interface ReviewHtmlItem {
   review_id: string;
-  data: Record<string, any>;
+  data: any;
 }
 
 export interface ValidationResultItem {

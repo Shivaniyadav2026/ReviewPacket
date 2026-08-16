@@ -1,5 +1,5 @@
 {
-  "baseUrl": "https://collaborator.honeywell.com",
+  "baseUrl": "https://collaborator.honaero.com",
   "reviewPathTemplate": "/ui#review:id={reviewId}",
   "jsonApiPath": "/services/json/v1",
   "requestTimeoutSeconds": 150,

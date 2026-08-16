@@ -73,7 +73,6 @@ export class AppComponent {
   collaboratorUsername = '';
   collaboratorTicket = '';
   private readonly collaboratorDefaultFields = [
-    'Review Status',
     'Review Title',
     'Role',
     'Created',
@@ -81,7 +80,7 @@ export class AppComponent {
     'Template',
     'Deadline',
     'Completed on',
-    'Restricted Uploads/Deletions',
+    'Restricted Access',
     'Overview',
     'Work Product Version',
     'Meeting Details',
@@ -94,8 +93,9 @@ export class AppComponent {
     'Aero - Software load under work/test',
     'Supporting Materials/Comments',
     'Functional Area',
-    'Participants',
-    'Defects'
+    'Work Product Type',
+    'Checklist'
+    
   ];
 
   form!: FormGroup;
@@ -480,6 +480,10 @@ export class AppComponent {
         this.showError(err?.error?.detail || 'Failed to export Collaborator CSV.');
       }
     });
+  }
+
+  get hasCompleteReviews(): boolean {
+    return this.collaboratorResults?.some((x) => x.status === 'Complete') || false;
   }
 
   async downloadCollaboratorPdfs(): Promise<void> {

@@ -17,6 +17,7 @@ class ParserService:
         "Template",
         "Deadline",
         "Completed on",
+        "Restricted Access",
         "Restricted Uploads/Deletions",
         "Overview",
         "Work Product Version",
@@ -30,8 +31,8 @@ class ParserService:
         "Aero - Software load under work/test",
         "Supporting Materials/Comments",
         "Functional Area",
-        "Participants",
-        "Defects",
+        "Work Product Type",
+        "Checklist",
     ]
 
     _CANONICAL_LABELS: dict[str, str] = {
@@ -44,8 +45,9 @@ class ParserService:
         "template": "Template",
         "deadline": "Deadline",
         "completed on": "Completed on",
-        "restricted uploads/deletions": "Restricted Uploads/Deletions",
-        "restricted uploads deletions": "Restricted Uploads/Deletions",
+        "restricted uploads/deletions": "Restricted Access",
+        "restricted uploads deletions": "Restricted Access",
+        "restricted access": "Restricted Access",
         "overview": "Overview",
         "work product version": "Work Product Version",
         "meeting details": "Meeting Details",
@@ -65,8 +67,9 @@ class ParserService:
         "supporting materials comments": "Supporting Materials/Comments",
         "functional area": "Functional Area",
         "project": "Project",
-        "participants": "Participants",
-        "defects": "Defects",
+        "participants": "",
+        "defects": "",
+        "work product type": "Work Product Type",
     }
 
     def parse_review_json(self, payload: Mapping[str, Any] | list[Any] | None) -> dict[str, str]:
@@ -93,8 +96,11 @@ class ParserService:
         )
         fields["Template"] = self._scalar_to_text(review.get("templateName"))
         fields["Deadline"] = self._scalar_to_text(review.get("deadline"))
-        fields["Completed on"] = self._scalar_to_text(review.get("completedOn"))
-        fields["Restricted Uploads/Deletions"] = self._scalar_to_text(review.get("restrictAccess"))
+        # Completed on may be provided as 'lastActivity' in some API responses
+        fields["Completed on"] = self._scalar_to_text(
+            review.get("lastActivity") or review.get("completedOn")
+        )
+        fields["Restricted Access"] = self._scalar_to_text(review.get("restrictAccess") or review.get("restrictAccesses") or review.get("restrictAccess"))
 
         self._merge_named_field_list(
             fields,
@@ -148,8 +154,113 @@ class ParserService:
                 fields[canonical] = value
 
         self._normalize_project_fields(fields)
+        # Extract participants and review effort summary
+        participants_list, review_effort_count = self._extract_participants_summary(review)
+        if participants_list:
+            fields["Participants List"] = participants_list
+        fields["Review Effort Count"] = str(review_effort_count)
+        fields["Review Effort OK"] = "true" if review_effort_count >= 3 else "false"
+
+        # Compute checklist status
+        fields["Checklist"] = self._compute_checklist_status(review)
+
+        # maintain backward-compatible key name
+        fields["Restricted Uploads/Deletions"] = fields.get("Restricted Access", "")
+
         return self._normalize_required_fields(fields)
 
+    def _extract_participants_summary(self, review: Mapping[str, Any]) -> tuple[str, int]:
+        participants = self._get_list_field(review, ["reviewParticipants", "reviewparticipants", "participants"])
+        names: list[str] = []
+        effort_count = 0
+        if not isinstance(participants, list):
+            return ("", 0)
+
+        for participant in participants:
+            if not isinstance(participant, Mapping):
+                continue
+            user = participant.get("user") or {}
+            name = self._scalar_to_text(user.get("fullName") or user.get("displayName") or user.get("initials") or user.get("name"))
+            if not name:
+                name = self._scalar_to_text(participant.get("displayName") or participant.get("name"))
+            if name:
+                names.append(name)
+
+            # Detect review effort in participant's custom fields
+            custom_list = self._get_list_field(participant, ["customFieldValue", "customFields", "customfields", "custom_fields"])
+            if isinstance(custom_list, list):
+                for entry in custom_list:
+                    if not isinstance(entry, Mapping):
+                        continue
+                    title = self._scalar_to_text(entry.get("customFieldTitle") or entry.get("name") or entry.get("title"))
+                    value = ""
+                    raw_value = entry.get("customFieldValue") or entry.get("value") or entry.get("values")
+                    if raw_value is None:
+                        for k, v in entry.items():
+                            if str(k).lower().startswith("value"):
+                                raw_value = v
+                                break
+                    if isinstance(raw_value, list):
+                        value = ", ".join(self._scalar_to_text(x) for x in raw_value if self._scalar_to_text(x))
+                    else:
+                        value = self._scalar_to_text(raw_value)
+
+                    if title and title.lower().strip().startswith("review effort") and value:
+                        effort_count += 1
+                        break
+
+            # If participant-level fields also include role.systemName == Author, set Role to Author
+            role = participant.get("role") or {}
+            role_system = self._scalar_to_text(role.get("systemName") or role.get("systemname") or role.get("name"))
+            if role_system and role_system.lower() == "author":
+                # prefer to set top-level Role to Author
+                # this will be merged into fields via canonicalization if not already present
+                # add a special flattened key so it will be picked up
+                if not review.get("role"):
+                    review["role"] = "Author"
+
+        return (", ".join(names), effort_count)
+
+    def _compute_checklist_status(self, review: Mapping[str, Any]) -> str:
+        # Walk reviewChecklists and count checked/total. If unchecked items have comments, consider them checked.
+        lists = self._get_list_field(review, ["reviewChecklists", "reviewchecklists", "review_checklists"])
+        if not isinstance(lists, list):
+            return ""
+
+        true_count = 0
+        total = 0
+
+        def _walk(obj: Any):
+            nonlocal true_count, total
+            if isinstance(obj, Mapping):
+                if "checked" in obj:
+                    total += 1
+                    checked = obj.get("checked")
+                    if isinstance(checked, bool):
+                        is_checked = checked
+                    else:
+                        is_checked = str(checked).lower() == "true"
+                    if not is_checked:
+                        # check for comments
+                        comments = obj.get("comments") or obj.get("Comments") or obj.get("comment")
+                        if comments and self._scalar_to_text(comments):
+                            is_checked = True
+                    if is_checked:
+                        true_count += 1
+                for v in obj.values():
+                    _walk(v)
+            elif isinstance(obj, list):
+                for item in obj:
+                    _walk(item)
+
+        for entry in lists:
+            _walk(entry)
+
+        if total == 0:
+            return ""
+        if true_count == total:
+            return "All checked"
+        return f"Fail/{true_count}/{total}"
     def _extract_review_object(self, payload: Any) -> dict[str, Any]:
         if isinstance(payload, Mapping):
             result = payload.get("result")
@@ -178,14 +289,18 @@ class ParserService:
             if not isinstance(entry, Mapping):
                 continue
 
-            name = self._scalar_to_text(entry.get("name"))
+            # Accept various naming conventions used by different API versions
+            name = self._scalar_to_text(
+                entry.get("name") or entry.get("title") or entry.get("customFieldTitle") or entry.get("customfieldtitle")
+            )
             if not name:
                 continue
 
-            raw_value = entry.get("value")
+            raw_value = entry.get("value") or entry.get("customFieldValue") or entry.get("customfieldvalue")
             if raw_value is None:
                 for key, value in entry.items():
-                    if str(key).lower().startswith("value"):
+                    kl = str(key).lower()
+                    if kl.startswith("value") or kl.startswith("customfieldvalue"):
                         raw_value = value
                         break
 
