@@ -436,34 +436,56 @@ export class AppComponent {
         this.api.parseValidateCollaboratorReviews(this.collaboratorSelectedFields, reviewPayload)
       );
 
+      // Targeted fallback: for rows missing the specific custom field
+      const targetFieldTitle = 'Aero - Software load under work/test';
+
+      const findCustomFieldValue = (obj: any, title: string): string | null => {
+        if (!obj || typeof obj !== 'object') {
+          return null;
+        }
+        if (Array.isArray(obj)) {
+          for (const item of obj) {
+            const v = findCustomFieldValue(item, title);
+            if (v !== null) return v;
+          }
+          return null;
+        }
+        if (obj.customFieldTitle === title && obj.customFieldValue) {
+          if (Array.isArray(obj.customFieldValue)) {
+            return obj.customFieldValue.join(', ');
+          }
+          return String(obj.customFieldValue);
+        }
+        for (const key of Object.keys(obj)) {
+          const v = findCustomFieldValue(obj[key], title);
+          if (v !== null) return v;
+        }
+        return null;
+      };
+
       for (const reviewEntry of reviewPayload) {
         const matchingResult = parseResponse?.results?.find((row) => row.review_id === reviewEntry.review_id);
-        if (!matchingResult || matchingResult.missing_fields.length === 0) {
+        if (!matchingResult) continue;
+
+        if (!matchingResult.missing_fields || !matchingResult.missing_fields.includes(targetFieldTitle)) {
           continue;
         }
 
+        // Call the summary API only to extract this custom field value
         const summaryData = await this.fetchReviewSummaryFallback(reviewEntry.review_id);
-        if (!summaryData) {
-          continue;
-        }
+        if (!summaryData) continue;
 
-        const refreshedReview = {
-          review_id: reviewEntry.review_id,
-          data: { body: summaryData }
-        };
+        const extracted = findCustomFieldValue(summaryData, targetFieldTitle);
+        if (!extracted) continue;
 
-        const refreshedResponse = await firstValueFrom(
-          this.api.parseValidateCollaboratorReviews(this.collaboratorSelectedFields, [refreshedReview])
-        );
+        // Inject the recovered value into the parsed result
+        if (!matchingResult.field_values) matchingResult.field_values = {};
+        matchingResult.field_values[targetFieldTitle] = extracted;
 
-        const refreshedRow = refreshedResponse?.results?.[0];
-        if (refreshedRow) {
-          const existingIndex = parseResponse.results.findIndex((row) => row.review_id === refreshedRow.review_id);
-          if (existingIndex >= 0) {
-            parseResponse.results[existingIndex] = refreshedRow;
-          } else {
-            parseResponse.results.push(refreshedRow);
-          }
+        // Remove from missing fields and update status if applicable
+        matchingResult.missing_fields = (matchingResult.missing_fields || []).filter((f) => f !== targetFieldTitle);
+        if (matchingResult.missing_fields.length === 0) {
+          matchingResult.status = 'Complete';
         }
       }
 
@@ -524,15 +546,19 @@ export class AppComponent {
     }
 
     try {
-      const result = await api.fetchReviewSummary(this.collaboratorConfig.base_url, reviewId, {
+      const auth = {
         username: this.collaboratorUsername,
         ticket: this.collaboratorTicket,
-        jsonApiPath: this.collaboratorConfig.json_api_path,
+        jsonApiPath: this.collaboratorConfig.json_api_path
+      };
+      const extras = {
         clientBuild: 14000,
         clientGuid: 'test-client',
         active: true,
         updateToken: null
-      });
+      };
+
+      const result = await api.fetchReviewSummary(this.collaboratorConfig.base_url, reviewId, auth, extras);
 
       if (result?.error) {
         this.logFlow('collaborator:fallback:error', 'Review summary fallback failed.', {
