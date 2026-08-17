@@ -402,6 +402,80 @@ ipcMain.handle('collaborator:fetch-review-data', async (_event, payload) => {
   return { data: {}, error };
 });
 
+ipcMain.handle('collaborator:fetch-review-summary', async (_event, payload) => {
+  const baseUrl = normalizeBaseUrl(payload?.baseUrl);
+  const reviewId = String(payload?.reviewId || '').trim();
+  const auth = payload?.auth || {};
+  const jsonApiPath = auth?.jsonApiPath;
+  const clientBuild = Number(payload?.clientBuild ?? 14000);
+  const clientGuid = String(payload?.clientGuid || 'test-client').trim() || 'test-client';
+  const active = payload?.active ?? true;
+  const updateToken = payload?.updateToken ?? null;
+
+  if (!baseUrl || !reviewId) {
+    const error = {
+      code: 'INVALID_INPUT',
+      message: 'baseUrl and reviewId are required.'
+    };
+    writeCollaboratorLog('jsonapi:error', 'Invalid review summary request.', error);
+    return { data: {}, error };
+  }
+
+  const cookies = await getCollaboratorSession().cookies.get({ url: baseUrl });
+  if (!cookies.length) {
+    const error = {
+      code: 'AUTH_REQUIRED',
+      message: 'No Collaborator session cookie found. Please login first.'
+    };
+    writeCollaboratorLog('jsonapi:error', 'Missing authenticated session for review summary.', { baseUrl, reviewId });
+    return { data: {}, error };
+  }
+
+  const storedAuth = loadStoredCollaboratorAuth();
+  const username = String(auth?.username || storedAuth.username || '').trim();
+  const ticket = String(auth?.ticket || storedAuth.ticket || '').trim();
+
+  if (username || ticket) {
+    saveStoredCollaboratorAuth({ username, ticket });
+  }
+
+  const batch = [];
+  if (username && ticket) {
+    batch.push({
+      command: 'SessionService.authenticate',
+      args: { login: username, ticket }
+    });
+  }
+
+  batch.push({
+    command: 'ReviewService.getReviewSummary',
+    args: {
+      reviewId,
+      clientBuild,
+      clientGuid,
+      active,
+      updateToken
+    }
+  });
+
+  const response = await postCollaboratorJson(baseUrl, jsonApiPath, batch);
+  if (response.ok) {
+    const summaryData = response.data || {};
+    writeCollaboratorLog('jsonapi', 'Fetched review summary from Collaborator JSON API.', {
+      reviewId,
+      payloadType: Array.isArray(summaryData) ? 'array' : typeof summaryData,
+      keys: summaryData && !Array.isArray(summaryData) ? Object.keys(summaryData || {}) : []
+    });
+    return { data: summaryData, error: null };
+  }
+
+  writeCollaboratorLog('jsonapi:error', 'Review summary API call failed.', {
+    reviewId,
+    error: response.error
+  });
+  return { data: {}, error: response.error };
+});
+
 ipcMain.handle('collaborator:get-auth', async () => {
   const auth = loadStoredCollaboratorAuth();
   writeCollaboratorLog('auth', 'Loaded stored Collaborator auth for renderer.', {

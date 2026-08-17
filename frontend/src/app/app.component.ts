@@ -432,9 +432,40 @@ export class AppComponent {
         });
       }
 
-      const parseResponse = await firstValueFrom(
+      let parseResponse = await firstValueFrom(
         this.api.parseValidateCollaboratorReviews(this.collaboratorSelectedFields, reviewPayload)
       );
+
+      for (const reviewEntry of reviewPayload) {
+        const matchingResult = parseResponse?.results?.find((row) => row.review_id === reviewEntry.review_id);
+        if (!matchingResult || matchingResult.missing_fields.length === 0) {
+          continue;
+        }
+
+        const summaryData = await this.fetchReviewSummaryFallback(reviewEntry.review_id);
+        if (!summaryData) {
+          continue;
+        }
+
+        const refreshedReview = {
+          review_id: reviewEntry.review_id,
+          data: { body: summaryData }
+        };
+
+        const refreshedResponse = await firstValueFrom(
+          this.api.parseValidateCollaboratorReviews(this.collaboratorSelectedFields, [refreshedReview])
+        );
+
+        const refreshedRow = refreshedResponse?.results?.[0];
+        if (refreshedRow) {
+          const existingIndex = parseResponse.results.findIndex((row) => row.review_id === refreshedRow.review_id);
+          if (existingIndex >= 0) {
+            parseResponse.results[existingIndex] = refreshedRow;
+          } else {
+            parseResponse.results.push(refreshedRow);
+          }
+        }
+      }
 
       this.availableCollaboratorFields = parseResponse?.available_fields || [];
       if (this.collaboratorSelectedFields.length === 0) {
@@ -484,6 +515,41 @@ export class AppComponent {
 
   get hasCompleteReviews(): boolean {
     return this.collaboratorResults?.some((x) => x.status === 'Complete') || false;
+  }
+
+  private async fetchReviewSummaryFallback(reviewId: string): Promise<any | null> {
+    const api = this.getElectronCollaboratorApi();
+    if (!api?.fetchReviewSummary || !this.collaboratorConfig) {
+      return null;
+    }
+
+    try {
+      const result = await api.fetchReviewSummary(this.collaboratorConfig.base_url, reviewId, {
+        username: this.collaboratorUsername,
+        ticket: this.collaboratorTicket,
+        jsonApiPath: this.collaboratorConfig.json_api_path,
+        clientBuild: 14000,
+        clientGuid: 'test-client',
+        active: true,
+        updateToken: null
+      });
+
+      if (result?.error) {
+        this.logFlow('collaborator:fallback:error', 'Review summary fallback failed.', {
+          reviewId,
+          error: result.error
+        });
+        return null;
+      }
+
+      return result?.data || null;
+    } catch (error: any) {
+      this.logFlow('collaborator:fallback:error', 'Unexpected review summary fallback error.', {
+        reviewId,
+        error: error?.message || error
+      });
+      return null;
+    }
   }
 
   async downloadCollaboratorPdfs(): Promise<void> {
