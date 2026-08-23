@@ -80,7 +80,7 @@ export class AppComponent {
     'Template',
     'Deadline',
     'Completed on',
-    'Restricted Access',
+    'Restricted Uploads/Detection',
     'Overview',
     'Work Product Version',
     'Meeting Details',
@@ -436,8 +436,12 @@ export class AppComponent {
         this.api.parseValidateCollaboratorReviews(this.collaboratorSelectedFields, reviewPayload)
       );
 
-      // Targeted fallback: for rows missing the specific custom field
-      const targetFieldTitle = 'Aero - Software load under work/test';
+      // Targeted fallback: for rows missing specific custom fields
+      const targetFields = [
+        'Aero - Software load under work/test',
+        'Supporting Materials/Comments',
+        'Work Product Type'
+      ];
 
       const findCustomFieldValue = (obj: any, title: string): string | null => {
         if (!obj || typeof obj !== 'object') {
@@ -467,24 +471,24 @@ export class AppComponent {
         const matchingResult = parseResponse?.results?.find((row) => row.review_id === reviewEntry.review_id);
         if (!matchingResult) continue;
 
-        if (!matchingResult.missing_fields || !matchingResult.missing_fields.includes(targetFieldTitle)) {
-          continue;
-        }
+        const missingTargetFields = (matchingResult.missing_fields || []).filter((f: string) => targetFields.includes(f));
+        if (missingTargetFields.length === 0) continue;
 
-        // Call the summary API only to extract this custom field value
+        // Call the summary API once per review to extract missing custom field values
         const summaryData = await this.fetchReviewSummaryFallback(reviewEntry.review_id);
         if (!summaryData) continue;
 
-        const extracted = findCustomFieldValue(summaryData, targetFieldTitle);
-        if (!extracted) continue;
+        let anyRecovered = false;
+        for (const fieldTitle of missingTargetFields) {
+          const extracted = findCustomFieldValue(summaryData, fieldTitle);
+          if (!extracted) continue;
+          if (!matchingResult.field_values) matchingResult.field_values = {};
+          matchingResult.field_values[fieldTitle] = extracted;
+          matchingResult.missing_fields = (matchingResult.missing_fields || []).filter((f) => f !== fieldTitle);
+          anyRecovered = true;
+        }
 
-        // Inject the recovered value into the parsed result
-        if (!matchingResult.field_values) matchingResult.field_values = {};
-        matchingResult.field_values[targetFieldTitle] = extracted;
-
-        // Remove from missing fields and update status if applicable
-        matchingResult.missing_fields = (matchingResult.missing_fields || []).filter((f) => f !== targetFieldTitle);
-        if (matchingResult.missing_fields.length === 0) {
+        if (anyRecovered && (matchingResult.missing_fields || []).length === 0) {
           matchingResult.status = 'Complete';
         }
       }
