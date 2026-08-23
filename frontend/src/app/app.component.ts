@@ -467,6 +467,36 @@ export class AppComponent {
         return null;
       };
 
+      const parseReviewParticipants = (summary: any): any[] => {
+        const out: any[] = [];
+        const parts = summary?.reviewParticipants || [];
+        if (!Array.isArray(parts)) return out;
+        for (const p of parts) {
+          const participant: any = {};
+          participant.roleSystemName = p?.role?.systemName || p?.role?.name || null;
+          participant.user = p?.user || null;
+          participant.customFields = [];
+          if (Array.isArray(p.customFieldValue)) {
+            for (const cf of p.customFieldValue) {
+              const title = cf?.customFieldTitle || cf?.title || null;
+              let value: string | null = null;
+              if (cf && cf.customFieldValue !== undefined) {
+                if (Array.isArray(cf.customFieldValue)) {
+                  value = cf.customFieldValue.join(', ');
+                } else {
+                  value = String(cf.customFieldValue);
+                }
+              } else if (title) {
+                value = findCustomFieldValue(cf, title);
+              }
+              participant.customFields.push({ title, value });
+            }
+          }
+          out.push(participant);
+        }
+        return out;
+      };
+
       for (const reviewEntry of reviewPayload) {
         const matchingResult = parseResponse?.results?.find((row) => row.review_id === reviewEntry.review_id);
         if (!matchingResult) continue;
@@ -478,7 +508,12 @@ export class AppComponent {
         const summaryData = await this.fetchReviewSummaryFallback(reviewEntry.review_id);
         if (!summaryData) continue;
 
+        // Parse participants and custom fields
+        const participantsList = parseReviewParticipants(summaryData);
+
         let anyRecovered = false;
+
+        // Recover targeted custom fields
         for (const fieldTitle of missingTargetFields) {
           const extracted = findCustomFieldValue(summaryData, fieldTitle);
           if (!extracted) continue;
@@ -487,6 +522,50 @@ export class AppComponent {
           matchingResult.missing_fields = (matchingResult.missing_fields || []).filter((f) => f !== fieldTitle);
           anyRecovered = true;
         }
+
+        // Review Phase: prefer value from findReviewById (original fetch), fallback to summary
+        const reviewPhaseFromFind = reviewEntry?.data?.body?.reviewPhase || reviewEntry?.data?.body?.reviewPhaseName || '';
+        const reviewPhase = reviewPhaseFromFind || summaryData?.reviewPhase || summaryData?.reviewPhaseName || '';
+        if (reviewPhase) {
+          if (!matchingResult.field_values) matchingResult.field_values = {};
+          matchingResult.field_values['Review Phase'] = reviewPhase;
+          matchingResult.missing_fields = (matchingResult.missing_fields || []).filter((f) => f !== 'Review Phase');
+          anyRecovered = true;
+        }
+
+        // Completed on from original fetch (findReviewById -> lastActivity)
+        const completedOn = reviewEntry?.data?.body?.lastActivity || reviewEntry?.data?.body?.creationDate || '';
+        if (completedOn) {
+          if (!matchingResult.field_values) matchingResult.field_values = {};
+          matchingResult.field_values['Completed on'] = completedOn;
+          matchingResult.missing_fields = (matchingResult.missing_fields || []).filter((f) => f !== 'Completed on');
+          anyRecovered = true;
+        }
+
+        // Role: if any participant roleSystemName == 'Author'
+        const hasAuthor = participantsList.some((pp) => String(pp.roleSystemName || '').toLowerCase() === 'author');
+        if (hasAuthor) {
+          if (!matchingResult.field_values) matchingResult.field_values = {};
+          matchingResult.field_values['Role'] = 'Author';
+          matchingResult.missing_fields = (matchingResult.missing_fields || []).filter((f) => f !== 'Role');
+          anyRecovered = true;
+        }
+
+        // Custom Participants: true if >=3 participants have non-empty 'Review Effort (hh:mm)'
+        const effortCount = participantsList.reduce((acc, pp) => {
+          if (!Array.isArray(pp.customFields)) return acc;
+          for (const cf of pp.customFields) {
+            if (cf?.title === 'Review Effort (hh:mm)' && cf?.value && String(cf.value).trim() !== '') {
+              return acc + 1;
+            }
+          }
+          return acc;
+        }, 0);
+        const customParticipantsValue = effortCount >= 3 ? 'true' : 'false';
+        if (!matchingResult.field_values) matchingResult.field_values = {};
+        matchingResult.field_values['Custom Participants'] = customParticipantsValue;
+        matchingResult.missing_fields = (matchingResult.missing_fields || []).filter((f) => f !== 'Custom Participants');
+        if (effortCount >= 3) anyRecovered = true;
 
         if (anyRecovered && (matchingResult.missing_fields || []).length === 0) {
           matchingResult.status = 'Complete';
