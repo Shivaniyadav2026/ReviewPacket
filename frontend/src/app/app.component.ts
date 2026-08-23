@@ -500,9 +500,27 @@ export class AppComponent {
       for (const reviewEntry of reviewPayload) {
         const matchingResult = parseResponse?.results?.find((row) => row.review_id === reviewEntry.review_id);
         if (!matchingResult) continue;
+        let anyRecovered = false;
+
+        // Always map Completed on from the primary findReviewById response (prefer lastActivity)
+        const completedOn = reviewEntry?.data?.body?.lastActivity || reviewEntry?.data?.body?.completedOn || reviewEntry?.data?.body?.creationDate || '';
+        if (completedOn) {
+          if (!matchingResult.field_values) matchingResult.field_values = {};
+          // Only set if not already present
+          if (!matchingResult.field_values['Completed on']) {
+            matchingResult.field_values['Completed on'] = completedOn;
+            // If it was listed as missing, remove it and mark as recovered
+            const beforeMissing = (matchingResult.missing_fields || []).length;
+            matchingResult.missing_fields = (matchingResult.missing_fields || []).filter((f) => f !== 'Completed on');
+            if (matchingResult.missing_fields.length !== beforeMissing) {
+              // mark that we recovered something
+              anyRecovered = true;
+            }
+          }
+        }
 
         const missingTargetFields = (matchingResult.missing_fields || []).filter((f: string) => targetFields.includes(f));
-        if (missingTargetFields.length === 0) continue;
+        if (missingTargetFields.length === 0 && !(matchingResult.missing_fields || []).includes('Role')) continue;
 
         // Call the summary API once per review to extract missing custom field values
         const summaryData = await this.fetchReviewSummaryFallback(reviewEntry.review_id);
@@ -510,8 +528,6 @@ export class AppComponent {
 
         // Parse participants and custom fields
         const participantsList = parseReviewParticipants(summaryData);
-
-        let anyRecovered = false;
 
         // Recover targeted custom fields
         for (const fieldTitle of missingTargetFields) {
@@ -533,14 +549,7 @@ export class AppComponent {
           anyRecovered = true;
         }
 
-        // Completed on from original fetch (findReviewById -> lastActivity)
-        const completedOn = reviewEntry?.data?.body?.lastActivity || reviewEntry?.data?.body?.creationDate || '';
-        if (completedOn) {
-          if (!matchingResult.field_values) matchingResult.field_values = {};
-          matchingResult.field_values['Completed on'] = completedOn;
-          matchingResult.missing_fields = (matchingResult.missing_fields || []).filter((f) => f !== 'Completed on');
-          anyRecovered = true;
-        }
+        
 
         // Role: if any participant roleSystemName == 'Author'
         const hasAuthor = participantsList.some((pp) => String(pp.roleSystemName || '').toLowerCase() === 'author');
@@ -564,8 +573,7 @@ export class AppComponent {
         const customParticipantsValue = effortCount >= 3 ? 'true' : 'false';
         if (!matchingResult.field_values) matchingResult.field_values = {};
         matchingResult.field_values['Custom Participants'] = customParticipantsValue;
-        matchingResult.missing_fields = (matchingResult.missing_fields || []).filter((f) => f !== 'Custom Participants');
-        if (effortCount >= 3) anyRecovered = true;
+        // Do not modify missing_fields for 'Custom Participants' (it's not part of validation fields)
 
         if (anyRecovered && (matchingResult.missing_fields || []).length === 0) {
           matchingResult.status = 'Complete';
