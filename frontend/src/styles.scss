@@ -56,6 +56,18 @@ body {
   max-height: 420px;
 }
 
+/* Make table header cells sticky when scrolling inside the .table-wrapper only */
+.table-wrapper th.mat-header-cell {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: var(--rp-card);
+}
+
+.table-wrapper tr.mat-header-row {
+  box-shadow: 0 2px 4px rgba(0,0,0,0.04);
+}
+
 .mat-mdc-table {
   min-width: 800px;
 }

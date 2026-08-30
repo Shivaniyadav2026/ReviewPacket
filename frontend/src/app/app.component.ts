@@ -304,7 +304,7 @@ export class AppComponent {
         [
           row['Issue Key'] || '',
           row['Review Info'] || '',
-          this.extractReviewIdsFromReviewInfo(row['Review Info'] || '')
+          this.extractReviewIdsFromRowColumns(row)
         ]
           .map((value) => this.escapeCsvValue(value))
           .join(',')
@@ -329,7 +329,7 @@ export class AppComponent {
         continue;
       }
 
-      const extracted = this.extractReviewIdsFromReviewInfo(row['Review Info'] || '');
+      const extracted = this.extractReviewIdsFromRowColumns(row);
       for (const reviewId of extracted.split(',').map((value) => value.trim()).filter((value) => value)) {
         if (!reviewIds.includes(reviewId)) {
           reviewIds.push(reviewId);
@@ -811,8 +811,15 @@ export class AppComponent {
   }
 
   private extractReviewIdsFromReviewInfo(reviewInfo: string): string {
-    const text = String(reviewInfo || '').trim();
+    const text = typeof reviewInfo === 'string' ? reviewInfo.trim() : JSON.stringify(reviewInfo || '').trim();
+    // Log the incoming value (truncate to avoid huge logs)
+    try {
+      this.logFlow('preview:extract', 'Extracting review IDs from Review Info.', { preview: text?.slice(0, 1000) });
+    } catch (e) {
+      // swallow logging errors
+    }
     if (!text) {
+      this.logFlow('preview:extract:none', 'No Review Info to extract from.', { preview: text });
       return '';
     }
 
@@ -823,12 +830,14 @@ export class AppComponent {
       }
     };
 
+    // Broader patterns: allow 4-7 digit IDs, optional colon after '#', and 'review' immediately followed by digits
     const patterns = [
-      /\breview\s*:?\s*id\s*[=:]\s*(\d{5})\b/gi,
-      /\breviewid\s*[=:]\s*(\d{5})\b/gi,
-      /\breview\s*packet\s*[:=]\s*(\d{5})\b/gi,
-      /\breview\s*#\s*(\d{5})\b/gi,
-      /#\s*(\d{5})\b/g
+      /\breview\s*:?\s*id\s*[=:]\s*(\d{4,7})\b/gi,
+      /\breviewid\s*[=:]\s*(\d{4,7})\b/gi,
+      /\breview\s*packet\s*[:=]\s*(\d{4,7})\b/gi,
+      /\breview\s*#\s*:?\s*(\d{4,7})\b/gi,
+      /\breview[-\s]*[:#-]?\s*(\d{4,7})\b/gi,
+      /#\s*:?\s*(\d{4,7})\b/g
     ];
 
     for (const pattern of patterns) {
@@ -838,16 +847,66 @@ export class AppComponent {
     }
 
     if (reviewIds.length > 0) {
+      try { this.logFlow('preview:extract:result', 'Extracted review IDs.', { preview: text?.slice(0, 500), extracted: reviewIds }); } catch (e) {}
       return reviewIds.join(', ');
     }
 
-    if (/^\s*\d{5}(\s*[,;]\s*\d{5})*\s*$/.test(text)) {
-      for (const match of text.matchAll(/\b(\d{5})\b/g)) {
+    // Fallback: if the whole text is a comma/semicolon separated list of 4-7 digit numbers
+    if (/^\s*\d{4,7}(\s*[,;]\s*\d{4,7})*\s*$/.test(text)) {
+      for (const match of text.matchAll(/\b(\d{4,7})\b/g)) {
         addId(match[1]);
       }
     }
 
+    // Final fallback: scan for any 4-7 digit numeric tokens
+    if (reviewIds.length === 0) {
+      for (const match of text.matchAll(/\b(\d{4,7})\b/g)) {
+        addId(match[1]);
+      }
+    }
+
+    try {
+      if (reviewIds.length > 0) {
+        this.logFlow('preview:extract:result', 'Extracted review IDs (fallback).', { preview: text?.slice(0, 500), extracted: reviewIds });
+      } else {
+        this.logFlow('preview:extract:none', 'No review IDs extracted from Review Info.', { preview: text?.slice(0, 500) });
+      }
+    } catch (e) {}
+
     return reviewIds.join(', ');
+  }
+
+  // Extract review IDs from multiple possible columns in a preview row
+  private extractReviewIdsFromRowColumns(row: Record<string, any>): string {
+    const columns = [
+      'Review Info',
+      'Custom field (Review Info)',
+      'Acceptance Criteria',
+      'Custom field (Acceptance Criteria)',
+      'Issue Links',
+      'Custom field (Issue Links)'
+    ];
+
+    const ids: string[] = [];
+    for (const col of columns) {
+      try {
+        const value = row[col] ?? '';
+        const extracted = this.extractReviewIdsFromReviewInfo(String(value || ''));
+        for (const id of extracted.split(',').map((v) => v.trim()).filter((v) => v)) {
+          if (!ids.includes(id)) {
+            ids.push(id);
+          }
+        }
+      } catch (e) {
+        // ignore per-column errors
+      }
+    }
+
+    try {
+      this.logFlow('preview:extract:multi', 'Extracted review IDs from multiple columns.', { extracted: ids, rowPreview: JSON.stringify(row || {}).slice(0, 1000) });
+    } catch (e) {}
+
+    return ids.join(', ');
   }
 
   get areAllHeadersSelected(): boolean {
