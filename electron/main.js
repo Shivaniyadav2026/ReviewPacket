@@ -384,6 +384,12 @@ ipcMain.handle('collaborator:fetch-review-data', async (_event, payload) => {
         payloadType: Array.isArray(userData) ? 'array' : typeof userData,
         keys: userData && !Array.isArray(userData) ? Object.keys(userData || {}) : []
       });
+      // Log full payload for debugging/mapping
+      try {
+        writeCollaboratorLog('jsonapi:response:findReviewById', 'Full findReviewById payload', { reviewId, data: userData });
+      } catch (err) {
+        writeCollaboratorLog('jsonapi:response:findReviewById:error', 'Failed to log full findReviewById payload', { reviewId, error: err?.message || err });
+      }
       return { data: userData || {}, error: null };
     }
     writeCollaboratorLog('jsonapi:retry', 'JSON API call variant failed, trying next.', {
@@ -466,6 +472,12 @@ ipcMain.handle('collaborator:fetch-review-summary', async (_event, payload) => {
       payloadType: Array.isArray(summaryData) ? 'array' : typeof summaryData,
       keys: summaryData && !Array.isArray(summaryData) ? Object.keys(summaryData || {}) : []
     });
+    // Log full summary payload for debugging/mapping
+    try {
+      writeCollaboratorLog('jsonapi:response:getReviewSummary', 'Full getReviewSummary payload', { reviewId, data: summaryData });
+    } catch (err) {
+      writeCollaboratorLog('jsonapi:response:getReviewSummary:error', 'Failed to log full getReviewSummary payload', { reviewId, error: err?.message || err });
+    }
     return { data: summaryData, error: null };
   }
 

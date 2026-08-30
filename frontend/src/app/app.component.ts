@@ -659,6 +659,15 @@ export class AppComponent {
         return null;
       }
 
+      // If we received data, log all values from the summary data structure
+      if (result?.data) {
+        try {
+          this.logSummaryData(reviewId, result.data);
+        } catch (e: any) {
+          this.logFlow('collaborator:error', 'Failed to log review summary data.', { reviewId, error: e?.message || e });
+        }
+      }
+
       return result?.data || null;
     } catch (error: any) {
       this.logFlow('collaborator:fallback:error', 'Unexpected review summary fallback error.', {
@@ -709,6 +718,31 @@ export class AppComponent {
       this.showError(detail);
       return false;
     }
+  }
+
+  // Recursively flatten an object and log all key paths and values for review summary debug
+  private logSummaryData(reviewId: string, data: any): void {
+    const entries: Array<{ path: string; value: any }> = [];
+
+    const walk = (node: any, path: string) => {
+      if (node === null || node === undefined) {
+        entries.push({ path, value: node });
+        return;
+      }
+      if (typeof node !== 'object') {
+        entries.push({ path, value: node });
+        return;
+      }
+      if (Array.isArray(node)) {
+        node.forEach((v, i) => walk(v, path ? `${path}[${i}]` : `[${i}]`));
+        return;
+      }
+      Object.keys(node).forEach((k) => walk(node[k], path ? `${path}.${k}` : k));
+    };
+
+    walk(data, '');
+
+    this.logFlow('collaborator:fallback:summary', 'Review summary data populated.', { reviewId, values: entries });
   }
 
   private ensureSelectedFieldsForValidation(): void {
