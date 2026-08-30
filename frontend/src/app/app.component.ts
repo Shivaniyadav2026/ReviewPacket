@@ -45,7 +45,7 @@ import {
 })
 export class AppComponent {
   private readonly collapsedCellWordLimit = 10;
-  revisionVersion = 5;
+  revisionVersion = 6;
   dumpFileName = '';
   keysFileName = '';
   headers: string[] = [];
@@ -810,7 +810,7 @@ export class AppComponent {
     return `${words.slice(0, limit).join(' ')}...`;
   }
 
-  private extractReviewIdsFromReviewInfo(reviewInfo: string): string {
+  private extractReviewIdsFromReviewInfo(reviewInfo: any): string {
     const text = typeof reviewInfo === 'string' ? reviewInfo.trim() : JSON.stringify(reviewInfo || '').trim();
     // Log the incoming value (truncate to avoid huge logs)
     try {
@@ -891,7 +891,7 @@ export class AppComponent {
     for (const col of columns) {
       try {
         const value = row[col] ?? '';
-        const extracted = this.extractReviewIdsFromReviewInfo(String(value || ''));
+        const extracted = this.extractReviewIdsFromReviewInfo(value);
         for (const id of extracted.split(',').map((v) => v.trim()).filter((v) => v)) {
           if (!ids.includes(id)) {
             ids.push(id);

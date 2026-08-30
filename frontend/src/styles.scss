@@ -57,14 +57,18 @@ body {
 }
 
 /* Make table header cells sticky when scrolling inside the .table-wrapper only */
-.table-wrapper th.mat-header-cell {
+.table-wrapper th[mat-header-cell],
+.table-wrapper th.mat-header-cell,
+.table-wrapper .mat-mdc-header-cell,
+.table-wrapper thead th {
   position: sticky;
   top: 0;
-  z-index: 3;
+  z-index: 999;
   background: var(--rp-card);
 }
 
-.table-wrapper tr.mat-header-row {
+.table-wrapper tr.mat-header-row,
+.table-wrapper thead tr {
   box-shadow: 0 2px 4px rgba(0,0,0,0.04);
 }
 
